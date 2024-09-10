@@ -1,0 +1,430 @@
+2024-09-10 23:49:14,173 - __main__ - INFO - Starting the bot
+2024-09-10 23:49:17,329 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-10 23:49:17,329 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-10 23:49:28,771 - __main__ - INFO - Received defi command: is avax as fast as ethereum mainnet?
+2024-09-10 23:49:29,038 - __main__ - DEBUG - Fetching Perplexity AI response
+2024-09-10 23:49:35,107 - __main__ - DEBUG - Perplexity AI response received: Avalanche (AVAX) is significantly faster than Ethereum's mainnet in terms of transaction speed and t...
+2024-09-10 23:49:35,108 - __main__ - DEBUG - Inferring protocols from question
+2024-09-10 23:49:35,446 - __main__ - DEBUG - Inferred protocols: ['Optimism Bridge', 'Base Bridge', 'Blast Bridge', 'Avalanche Core Bridge', 'Veax', 'Fastex', 'LFGSwap EthereumPoW', 'VAX', 'Xmas Past', 'Go Ethereum', 'Ethers']
+2024-09-10 23:49:35,446 - __main__ - DEBUG - Preparing DefiLlama data response
+2024-09-10 23:49:35,446 - __main__ - DEBUG - Sending responses
+2024-09-10 23:49:35,446 - __main__ - DEBUG - Sending AI response
+2024-09-10 23:49:35,446 - __main__ - DEBUG - Sending long message (length: 1066)
+2024-09-10 23:49:35,714 - __main__ - DEBUG - Long message sent successfully
+2024-09-10 23:49:35,715 - __main__ - INFO - Defi command completed successfully
+2024-09-10 23:55:02,309 - __main__ - INFO - Starting the bot
+2024-09-10 23:55:05,591 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-10 23:55:05,591 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-10 23:55:13,020 - __main__ - INFO - Received defi command: is avax as fast as ethereum mainnet?
+2024-09-10 23:55:13,246 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-10 23:55:19,667 - __main__ - DEBUG - Sending long message (length: 979)
+2024-09-10 23:55:19,946 - __main__ - DEBUG - Long message sent successfully
+2024-09-10 23:55:19,946 - __main__ - DEBUG - Sending long message (length: 639)
+2024-09-10 23:55:20,241 - __main__ - DEBUG - Long message sent successfully
+2024-09-10 23:55:20,242 - __main__ - INFO - Defi command completed successfully
+2024-09-10 23:55:27,574 - __main__ - INFO - Received defi command: is avax as fast as ethereum mainnet?
+2024-09-10 23:55:27,813 - __main__ - INFO - Exact cache hit for question: DeFi question: is avax as fast as ethereum mainnet?
+2024-09-10 23:55:27,813 - __main__ - INFO - Using cached Perplexity response
+2024-09-10 23:55:28,108 - __main__ - DEBUG - Sending long message (length: 979)
+2024-09-10 23:55:28,373 - __main__ - DEBUG - Long message sent successfully
+2024-09-10 23:55:28,374 - __main__ - DEBUG - Sending long message (length: 639)
+2024-09-10 23:55:28,710 - __main__ - DEBUG - Long message sent successfully
+2024-09-10 23:55:28,710 - __main__ - INFO - Defi command completed successfully
+2024-09-10 23:58:09,626 - __main__ - INFO - Starting the bot
+2024-09-10 23:58:12,813 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-10 23:58:12,813 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:14:14,803 - __main__ - INFO - Starting the bot
+2024-09-11 00:14:18,111 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:14:18,112 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:15:07,854 - __main__ - INFO - Received defi command: is base as fast as ethereum mainnet?
+2024-09-11 00:15:08,295 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:15:16,191 - __main__ - DEBUG - Sending long message (length: 1566)
+2024-09-11 00:15:16,442 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:15:16,443 - __main__ - DEBUG - Sending long message (length: 639)
+2024-09-11 00:15:16,828 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:15:16,829 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:19:13,664 - __main__ - INFO - Starting the bot
+2024-09-11 00:19:13,664 - __main__ - INFO - Starting the bot
+2024-09-11 00:19:16,926 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:19:16,926 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:19:16,927 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:19:16,927 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:19:55,769 - __main__ - INFO - Received defi command: is arbitrum a good alternative to base?
+2024-09-11 00:19:55,769 - __main__ - INFO - Received defi command: is arbitrum a good alternative to base?
+2024-09-11 00:19:56,155 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:19:56,155 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:20:08,613 - __main__ - DEBUG - Sending long message (length: 2734)
+2024-09-11 00:20:08,613 - __main__ - DEBUG - Sending long message (length: 2734)
+2024-09-11 00:20:08,613 - __main__ - DEBUG - Message split into 2 parts
+2024-09-11 00:20:08,613 - __main__ - DEBUG - Message split into 2 parts
+2024-09-11 00:20:09,186 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:20:09,186 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:20:09,187 - __main__ - DEBUG - Sending long message (length: 764)
+2024-09-11 00:20:09,187 - __main__ - DEBUG - Sending long message (length: 764)
+2024-09-11 00:20:09,448 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:20:09,448 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:20:09,448 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:20:09,448 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:23:57,378 - __main__ - INFO - Starting the bot
+2024-09-11 00:23:57,378 - __main__ - INFO - Starting the bot
+2024-09-11 00:24:00,742 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:24:00,742 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:24:00,743 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:24:00,743 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:33:03,395 - __main__ - INFO - Starting the bot
+2024-09-11 00:33:06,678 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:33:06,678 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:35:20,136 - __main__ - INFO - Starting the bot
+2024-09-11 00:35:23,429 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:35:23,429 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:35:30,457 - __main__ - INFO - Received defi command: is arbitrum a good alternative to base?
+2024-09-11 00:35:30,745 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:35:40,819 - __main__ - DEBUG - Sending long message (length: 1911)
+2024-09-11 00:35:41,065 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:35:41,065 - __main__ - DEBUG - Sending long message (length: 764)
+2024-09-11 00:35:41,358 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:35:41,359 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:40:37,543 - __main__ - INFO - Starting the bot
+2024-09-11 00:40:40,886 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:40:40,887 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:40:58,759 - __main__ - INFO - Received defi command: how does uniswap compare with dexs on arbitrum
+2024-09-11 00:40:59,110 - __main__ - INFO - Query analysis: {'protocols': [{'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': [], 'categories': ['Chain']}
+2024-09-11 00:40:59,110 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:41:14,843 - __main__ - ERROR - An error occurred: unsupported format string passed to NoneType.__format__
+2024-09-11 00:41:14,846 - __main__ - ERROR - Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 374, in defi
+    defillama_response += format_protocol_summary(protocol) + "\n"
+  File "/Users/fortune/Code/main.py", line 345, in format_protocol_summary
+    return (f"**{protocol['name']}**\n"
+TypeError: unsupported format string passed to NoneType.__format__
+
+2024-09-11 00:43:33,918 - __main__ - INFO - Starting the bot
+2024-09-11 00:43:37,248 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:43:37,248 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:43:39,669 - __main__ - INFO - Received defi command: how does uniswap compare with dexs on arbitrum
+2024-09-11 00:43:39,933 - __main__ - INFO - Query analysis: {'protocols': [{'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': [], 'categories': ['Chain']}
+2024-09-11 00:43:39,933 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:43:56,562 - __main__ - ERROR - An error occurred: unsupported format string passed to NoneType.__format__
+2024-09-11 00:43:56,565 - __main__ - ERROR - Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 381, in defi
+    defillama_response += format_protocol_summary(protocol) + "\n"
+  File "/Users/fortune/Code/main.py", line 349, in format_protocol_summary
+    summary += f"• 24h Change: {protocol.get('change_1d', 0):.2f}%\n"
+TypeError: unsupported format string passed to NoneType.__format__
+
+2024-09-11 00:46:51,427 - __main__ - INFO - Starting the bot
+2024-09-11 00:46:54,567 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:46:54,567 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:46:56,835 - __main__ - INFO - Received defi command: how does uniswap compare with dexs on arbitrum
+2024-09-11 00:46:57,607 - __main__ - INFO - Query analysis: {'protocols': [{'id': '4658', 'name': 'lendOS', 'address': None, 'symbol': '-', 'url': 'https://lendos.org/', 'description': 'Fastest lending, liquidity & leverage end-point for NeonEVM & Solana ecosystem', 'chain': 'Neon', 'logo': 'https://icons.llama.fi/lendos.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Lending', 'chains': ['Neon'], 'module': 'lendOS/index.js', 'forkedFrom': [], 'oracles': [], 'twitter': 'lendOSorg', 'listedAt': 1716396261, 'methodology': "Counts the tokens locked in the contracts to be used as collateral to borrow or to earn yield. Borrowed coins are not counted towards the TVL, so only the coins actually locked in the contracts are counted. There's multiple reasons behind this but one of the main ones is to avoid inflating the TVL through cycled lending.", 'slug': 'lendos', 'tvl': 448407.95022227336, 'chainTvls': {'Neon': 448407.95022227336, 'Neon-borrowed': 76132.17483582076, 'borrowed': 76132.17483582076}, 'change_1h': -0.5775019858440515, 'change_1d': -5.146373851411255, 'change_7d': 1.437373644695981, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2198', 'name': 'Uniswap V3', 'address': '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', 'symbol': 'UNI', 'url': 'https://uniswap.org/', 'description': 'A fully decentralized protocol for automated liquidity provision on Ethereum. V2\r\n', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/uniswap-v3.png', 'audits': '2', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Ethereum', 'Arbitrum', 'Polygon', 'Base', 'Optimism', 'Binance', 'Celo', 'RSK', 'Avalanche', 'ZKsync Era', 'Sei', 'Taiko', 'Mantle', 'Polygon zkEVM', 'Filecoin', 'Moonbeam', 'Scroll', 'Linea', 'Boba', 'Manta', 'Blast'], 'module': 'uniswap/index.js', 'twitter': 'Uniswap', 'audit_links': ['https://github.com/Uniswap/uniswap-v3-core/tree/main/audits', 'https://github.com/Uniswap/uniswap-v3-periphery/tree/main/audits', 'https://github.com/ConsenSys/Uniswap-audit-report-2018-12'], 'oracles': [], 'listedAt': 1666191475, 'parentProtocol': 'parent#uniswap', 'hallmarks': [[1588610042, 'UNI V2 Launch'], [1598412107, 'SushiSwap launch'], [1599535307, 'SushiSwap migration'], [1600226507, 'LM starts'], [1605583307, 'LM ends'], [1617333707, 'FEI launch'], [1620156420, 'UNI V3 Launch']], 'methodology': "Counts the tokens locked on AMM pools, pulling the data from the 'ianlapham/uniswapv2' subgraph", 'slug': 'uniswap-v3', 'tvl': 2734456201.489541, 'chainTvls': {'Sei': 4162512.432203086, 'Mantle': 3397768.3267060197, 'Taiko': 4128873.780316449, 'Polygon zkEVM': 3158793.0824544937, 'Manta': 241671.49689834713, 'Boba': 608180.9605343724, 'Moonbeam': 907195.2793089491, 'RSK': 14182889.545763813, 'Linea': 617261.4654806459, 'Filecoin': 2467940.280109644, 'Scroll': 672998.685511624, 'ZKsync Era': 7274136.997088498, 'Blast': 73441.40808280568, 'Optimism': 42578981.58742716, 'Binance': 25549947.58185481, 'Celo': 22526159.497819725, 'Avalanche': 11996942.471063817, 'Arbitrum': 274691969.9206442, 'Polygon': 224294524.76862562, 'Base': 110214903.14873527, 'Ethereum': 1980709108.7729115}, 'change_1h': 0.5152867753512425, 'change_1d': 3.2350963111560844, 'change_7d': 1.3924839835372893, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2524', 'name': 'Friends With Benefits', 'address': '0x35bD01FC9d6D5D81CA9E055Db88Dc49aa2c699A8', 'symbol': 'FWB', 'url': 'https://www.fwb.help/', 'description': 'A new kind of social network - owned by the creatives and builders who believe in the promise of a better internet', 'logo': 'https://icons.llama.fi/friends-with-benefits.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'friends-with-benefits-pro', 'cmcId': '10090', 'category': 'Services', 'chains': [], 'module': 'dummy.js', 'treasury': 'friendswithbenefits.js', 'twitter': 'FWBtweets', 'oracles': [], 'forkedFrom': [], 'governanceID': ['snapshot:friendswithbenefits.eth'], 'github': ['friends-with-benefits'], 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'friends-with-benefits', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '3277', 'name': 'dexSWAP', 'address': 'arbitrum:0x92a212d9f5eef0b262ac7d84aea64a0d0758b94f', 'symbol': 'GDEX', 'url': 'https://app.dexfinance.com/swap', 'description': 'Bringing the world tools to optimize and simplify DeFi investing.', 'chain': 'Arbitrum', 'logo': 'https://icons.llama.fi/dexswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Arbitrum'], 'module': 'dexswap-arbi/index.js', 'twitter': 'DexFinance', 'forkedFrom': ['Uniswap V2'], 'oracles': [], 'parentProtocol': 'parent#dexfinance', 'listedAt': 1690193404, 'misrepresentedTokens': True, 'slug': 'dexswap', 'tvl': 152532.14783762654, 'chainTvls': {'Arbitrum': 152532.14783762654}, 'change_1h': 0.34152794724475655, 'change_1d': -0.5450860017206054, 'change_7d': 26.67162000381802, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '240', 'name': 'Polygon Bridge & Staking', 'address': '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', 'symbol': 'MATIC', 'url': 'https://polygon.technology/', 'description': 'Ethereum sidechain\r\n', 'chain': 'Polygon', 'logo': 'https://icons.llama.fi/polygon.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'matic-network', 'cmcId': '3890', 'category': 'Chain', 'chains': ['Polygon'], 'module': 'polygon/index.js', 'twitter': '0xPolygon', 'slug': 'polygon-bridge-&-staking', 'tvl': 2575045914.6293235, 'chainTvls': {'Polygon': 2575045914.6293235}, 'change_1h': 0.2814199547446492, 'change_1d': 0.7287016114487841, 'change_7d': -44.391155112485826, 'tokenBreakdowns': {}, 'mcap': 1346301462.8532102}, {'id': '3777', 'name': 'Arbitrum Bridge', 'address': 'arbitrum:0x912ce59144191c1204e64559fe8253a0e49e6548', 'symbol': 'ARB', 'url': 'https://bridge.arbitrum.io', 'description': "The Arbitrum Bridge acts as a secure channel connecting Ethereum's mainnet (Layer-1) with the Arbitrum Rollup (Layer-2). This bridge allows users to transfer assets, like ETH or ERC-20 tokens, between these layers", 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/arbitrum-bridge.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Chain', 'chains': ['Ethereum'], 'oracles': [], 'forkedFrom': [], 'module': 'arbitrum/index.js', 'twitter': 'arbitrum', 'slug': 'arbitrum-bridge', 'tvl': 8658134698.498148, 'chainTvls': {'Ethereum': 8658134698.498148}, 'change_1h': 0.5312675587974383, 'change_1d': 1.3455754668588042, 'change_7d': -1.4826181225355128, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1072', 'name': 'IFSwap', 'address': 'csc:0x6925435f9d1cb710abeb680ec7ef3f8c5e1b2639', 'symbol': 'IFS', 'url': 'https://ifswap.finance', 'description': 'IFSwap is an open AMM model dex protocol for CSC.', 'chain': 'CSC', 'logo': 'https://icons.llama.fi/ifswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['CSC'], 'module': 'ifswap/index.js', 'twitter': 'if_networks', 'forkedFrom': ['Uniswap V2'], 'listedAt': 1640105053, 'misrepresentedTokens': True, 'methodology': 'We count liquidity of all paris through Factory Contract and Pools (single tokens) seccions through MasterChef Contract.', 'slug': 'ifswap', 'tvl': 846.2045921991258, 'chainTvls': {'CSC': 846.2045921991258}, 'change_1h': 0.6559307292427263, 'change_1d': -1.3715784784313598, 'change_7d': 6.068712262692102, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1265', 'name': 'X', 'address': '0x7f3141c4d6b047fb930991b450f1ed996a51cb26', 'symbol': 'X', 'url': 'https://x.xyz', 'description': 'X is a multichain decentralised NFT marketplace that is owned and operated by the NFT community. Governance is provided by the X DAO with voting rights given to token holders.', 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/x.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'x-2', 'cmcId': '16727', 'category': 'Services', 'chains': ['Ethereum'], 'module': 'x-xyz/index.js', 'twitter': 'Xdotxyz', 'listedAt': 1642194932, 'methodology': 'TVL for X.xyz consists of the staking of X into veX.', 'slug': 'x', 'tvl': 0, 'chainTvls': {'Ethereum': 0, 'Ethereum-staking': 0, 'staking': 0}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None, 'staking': 0}, {'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': ['ZKsync Era', 'Ethereum', 'Linea', 'Polygon zkEVM', 'Filecoin', 'Taiko', 'Avalanche', 'Mantle', 'Arbitrum', 'Optimism', 'RSK', 'Binance', 'Celo', 'Blast', 'Manta', 'Neon', 'Scroll', 'Polygon', 'Sei', 'CSC', 'Base', 'Moonbeam', 'Boba'], 'categories': ['Chain', 'Dexes', 'Services', 'Lending']}
+2024-09-11 00:46:57,608 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:47:11,509 - __main__ - ERROR - An error occurred: name 'get_competitors' is not defined
+2024-09-11 00:47:11,513 - __main__ - ERROR - Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 363, in defi
+    competitors = get_competitors(protocol, protocol.get('category', ''))
+NameError: name 'get_competitors' is not defined
+
+2024-09-11 00:49:25,506 - __main__ - INFO - Starting the bot
+2024-09-11 00:49:28,639 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:49:28,639 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:49:32,598 - __main__ - INFO - Received defi command: how does uniswap compare with dexs on arbitrum
+2024-09-11 00:49:33,364 - __main__ - INFO - Query analysis: {'protocols': [{'id': '4658', 'name': 'lendOS', 'address': None, 'symbol': '-', 'url': 'https://lendos.org/', 'description': 'Fastest lending, liquidity & leverage end-point for NeonEVM & Solana ecosystem', 'chain': 'Neon', 'logo': 'https://icons.llama.fi/lendos.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Lending', 'chains': ['Neon'], 'module': 'lendOS/index.js', 'forkedFrom': [], 'oracles': [], 'twitter': 'lendOSorg', 'listedAt': 1716396261, 'methodology': "Counts the tokens locked in the contracts to be used as collateral to borrow or to earn yield. Borrowed coins are not counted towards the TVL, so only the coins actually locked in the contracts are counted. There's multiple reasons behind this but one of the main ones is to avoid inflating the TVL through cycled lending.", 'slug': 'lendos', 'tvl': 448407.95022227336, 'chainTvls': {'Neon': 448407.95022227336, 'Neon-borrowed': 76132.17483582076, 'borrowed': 76132.17483582076}, 'change_1h': -0.5775019858440515, 'change_1d': -5.146373851411255, 'change_7d': 1.437373644695981, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2198', 'name': 'Uniswap V3', 'address': '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', 'symbol': 'UNI', 'url': 'https://uniswap.org/', 'description': 'A fully decentralized protocol for automated liquidity provision on Ethereum. V2\r\n', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/uniswap-v3.png', 'audits': '2', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Ethereum', 'Arbitrum', 'Polygon', 'Base', 'Optimism', 'Binance', 'Celo', 'RSK', 'Avalanche', 'ZKsync Era', 'Sei', 'Taiko', 'Mantle', 'Polygon zkEVM', 'Filecoin', 'Moonbeam', 'Scroll', 'Linea', 'Boba', 'Manta', 'Blast'], 'module': 'uniswap/index.js', 'twitter': 'Uniswap', 'audit_links': ['https://github.com/Uniswap/uniswap-v3-core/tree/main/audits', 'https://github.com/Uniswap/uniswap-v3-periphery/tree/main/audits', 'https://github.com/ConsenSys/Uniswap-audit-report-2018-12'], 'oracles': [], 'listedAt': 1666191475, 'parentProtocol': 'parent#uniswap', 'hallmarks': [[1588610042, 'UNI V2 Launch'], [1598412107, 'SushiSwap launch'], [1599535307, 'SushiSwap migration'], [1600226507, 'LM starts'], [1605583307, 'LM ends'], [1617333707, 'FEI launch'], [1620156420, 'UNI V3 Launch']], 'methodology': "Counts the tokens locked on AMM pools, pulling the data from the 'ianlapham/uniswapv2' subgraph", 'slug': 'uniswap-v3', 'tvl': 2734456201.489541, 'chainTvls': {'Sei': 4162512.432203086, 'Mantle': 3397768.3267060197, 'Taiko': 4128873.780316449, 'Polygon zkEVM': 3158793.0824544937, 'Manta': 241671.49689834713, 'Boba': 608180.9605343724, 'Moonbeam': 907195.2793089491, 'RSK': 14182889.545763813, 'Linea': 617261.4654806459, 'Filecoin': 2467940.280109644, 'Scroll': 672998.685511624, 'ZKsync Era': 7274136.997088498, 'Blast': 73441.40808280568, 'Optimism': 42578981.58742716, 'Binance': 25549947.58185481, 'Celo': 22526159.497819725, 'Avalanche': 11996942.471063817, 'Arbitrum': 274691969.9206442, 'Polygon': 224294524.76862562, 'Base': 110214903.14873527, 'Ethereum': 1980709108.7729115}, 'change_1h': 0.5152867753512425, 'change_1d': 3.2350963111560844, 'change_7d': 1.3924839835372893, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2524', 'name': 'Friends With Benefits', 'address': '0x35bD01FC9d6D5D81CA9E055Db88Dc49aa2c699A8', 'symbol': 'FWB', 'url': 'https://www.fwb.help/', 'description': 'A new kind of social network - owned by the creatives and builders who believe in the promise of a better internet', 'logo': 'https://icons.llama.fi/friends-with-benefits.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'friends-with-benefits-pro', 'cmcId': '10090', 'category': 'Services', 'chains': [], 'module': 'dummy.js', 'treasury': 'friendswithbenefits.js', 'twitter': 'FWBtweets', 'oracles': [], 'forkedFrom': [], 'governanceID': ['snapshot:friendswithbenefits.eth'], 'github': ['friends-with-benefits'], 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'friends-with-benefits', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '3277', 'name': 'dexSWAP', 'address': 'arbitrum:0x92a212d9f5eef0b262ac7d84aea64a0d0758b94f', 'symbol': 'GDEX', 'url': 'https://app.dexfinance.com/swap', 'description': 'Bringing the world tools to optimize and simplify DeFi investing.', 'chain': 'Arbitrum', 'logo': 'https://icons.llama.fi/dexswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Arbitrum'], 'module': 'dexswap-arbi/index.js', 'twitter': 'DexFinance', 'forkedFrom': ['Uniswap V2'], 'oracles': [], 'parentProtocol': 'parent#dexfinance', 'listedAt': 1690193404, 'misrepresentedTokens': True, 'slug': 'dexswap', 'tvl': 152532.14783762654, 'chainTvls': {'Arbitrum': 152532.14783762654}, 'change_1h': 0.34152794724475655, 'change_1d': -0.5450860017206054, 'change_7d': 26.67162000381802, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '240', 'name': 'Polygon Bridge & Staking', 'address': '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', 'symbol': 'MATIC', 'url': 'https://polygon.technology/', 'description': 'Ethereum sidechain\r\n', 'chain': 'Polygon', 'logo': 'https://icons.llama.fi/polygon.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'matic-network', 'cmcId': '3890', 'category': 'Chain', 'chains': ['Polygon'], 'module': 'polygon/index.js', 'twitter': '0xPolygon', 'slug': 'polygon-bridge-&-staking', 'tvl': 2575045914.6293235, 'chainTvls': {'Polygon': 2575045914.6293235}, 'change_1h': 0.2814199547446492, 'change_1d': 0.7287016114487841, 'change_7d': -44.391155112485826, 'tokenBreakdowns': {}, 'mcap': 1346301462.8532102}, {'id': '3777', 'name': 'Arbitrum Bridge', 'address': 'arbitrum:0x912ce59144191c1204e64559fe8253a0e49e6548', 'symbol': 'ARB', 'url': 'https://bridge.arbitrum.io', 'description': "The Arbitrum Bridge acts as a secure channel connecting Ethereum's mainnet (Layer-1) with the Arbitrum Rollup (Layer-2). This bridge allows users to transfer assets, like ETH or ERC-20 tokens, between these layers", 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/arbitrum-bridge.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Chain', 'chains': ['Ethereum'], 'oracles': [], 'forkedFrom': [], 'module': 'arbitrum/index.js', 'twitter': 'arbitrum', 'slug': 'arbitrum-bridge', 'tvl': 8658134698.498148, 'chainTvls': {'Ethereum': 8658134698.498148}, 'change_1h': 0.5312675587974383, 'change_1d': 1.3455754668588042, 'change_7d': -1.4826181225355128, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1072', 'name': 'IFSwap', 'address': 'csc:0x6925435f9d1cb710abeb680ec7ef3f8c5e1b2639', 'symbol': 'IFS', 'url': 'https://ifswap.finance', 'description': 'IFSwap is an open AMM model dex protocol for CSC.', 'chain': 'CSC', 'logo': 'https://icons.llama.fi/ifswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['CSC'], 'module': 'ifswap/index.js', 'twitter': 'if_networks', 'forkedFrom': ['Uniswap V2'], 'listedAt': 1640105053, 'misrepresentedTokens': True, 'methodology': 'We count liquidity of all paris through Factory Contract and Pools (single tokens) seccions through MasterChef Contract.', 'slug': 'ifswap', 'tvl': 846.2045921991258, 'chainTvls': {'CSC': 846.2045921991258}, 'change_1h': 0.6559307292427263, 'change_1d': -1.3715784784313598, 'change_7d': 6.068712262692102, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1265', 'name': 'X', 'address': '0x7f3141c4d6b047fb930991b450f1ed996a51cb26', 'symbol': 'X', 'url': 'https://x.xyz', 'description': 'X is a multichain decentralised NFT marketplace that is owned and operated by the NFT community. Governance is provided by the X DAO with voting rights given to token holders.', 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/x.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'x-2', 'cmcId': '16727', 'category': 'Services', 'chains': ['Ethereum'], 'module': 'x-xyz/index.js', 'twitter': 'Xdotxyz', 'listedAt': 1642194932, 'methodology': 'TVL for X.xyz consists of the staking of X into veX.', 'slug': 'x', 'tvl': 0, 'chainTvls': {'Ethereum': 0, 'Ethereum-staking': 0, 'staking': 0}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None, 'staking': 0}, {'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': ['Taiko', 'Optimism', 'Blast', 'Linea', 'Boba', 'ZKsync Era', 'Polygon', 'Celo', 'Manta', 'Filecoin', 'Moonbeam', 'Base', 'Sei', 'Ethereum', 'Mantle', 'Polygon zkEVM', 'RSK', 'CSC', 'Binance', 'Neon', 'Arbitrum', 'Scroll', 'Avalanche'], 'categories': ['Lending', 'Services', 'Chain', 'Dexes']}
+2024-09-11 00:49:33,364 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:49:46,454 - __main__ - ERROR - An error occurred: unsupported operand type(s) for +: 'float' and 'NoneType'
+2024-09-11 00:49:46,455 - __main__ - ERROR - Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 316, in defi
+    total_tvl = sum(p.get('tvl', 0) for p in category_protocols)
+TypeError: unsupported operand type(s) for +: 'float' and 'NoneType'
+
+2024-09-11 00:50:59,341 - __main__ - INFO - Starting the bot
+2024-09-11 00:51:02,598 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:51:02,598 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:51:03,580 - __main__ - INFO - Received defi command: how does uniswap compare with dexs on arbitrum
+2024-09-11 00:51:04,370 - __main__ - INFO - Query analysis: {'protocols': [{'id': '4658', 'name': 'lendOS', 'address': None, 'symbol': '-', 'url': 'https://lendos.org/', 'description': 'Fastest lending, liquidity & leverage end-point for NeonEVM & Solana ecosystem', 'chain': 'Neon', 'logo': 'https://icons.llama.fi/lendos.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Lending', 'chains': ['Neon'], 'module': 'lendOS/index.js', 'forkedFrom': [], 'oracles': [], 'twitter': 'lendOSorg', 'listedAt': 1716396261, 'methodology': "Counts the tokens locked in the contracts to be used as collateral to borrow or to earn yield. Borrowed coins are not counted towards the TVL, so only the coins actually locked in the contracts are counted. There's multiple reasons behind this but one of the main ones is to avoid inflating the TVL through cycled lending.", 'slug': 'lendos', 'tvl': 448407.95022227336, 'chainTvls': {'Neon': 448407.95022227336, 'Neon-borrowed': 76132.17483582076, 'borrowed': 76132.17483582076}, 'change_1h': -0.5775019858440515, 'change_1d': -5.146373851411255, 'change_7d': 1.437373644695981, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2198', 'name': 'Uniswap V3', 'address': '0x1f9840a85d5af5bf1d1762f925bdaddc4201f984', 'symbol': 'UNI', 'url': 'https://uniswap.org/', 'description': 'A fully decentralized protocol for automated liquidity provision on Ethereum. V2\r\n', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/uniswap-v3.png', 'audits': '2', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Ethereum', 'Arbitrum', 'Polygon', 'Base', 'Optimism', 'Binance', 'Celo', 'RSK', 'Avalanche', 'ZKsync Era', 'Sei', 'Taiko', 'Mantle', 'Polygon zkEVM', 'Filecoin', 'Moonbeam', 'Scroll', 'Linea', 'Boba', 'Manta', 'Blast'], 'module': 'uniswap/index.js', 'twitter': 'Uniswap', 'audit_links': ['https://github.com/Uniswap/uniswap-v3-core/tree/main/audits', 'https://github.com/Uniswap/uniswap-v3-periphery/tree/main/audits', 'https://github.com/ConsenSys/Uniswap-audit-report-2018-12'], 'oracles': [], 'listedAt': 1666191475, 'parentProtocol': 'parent#uniswap', 'hallmarks': [[1588610042, 'UNI V2 Launch'], [1598412107, 'SushiSwap launch'], [1599535307, 'SushiSwap migration'], [1600226507, 'LM starts'], [1605583307, 'LM ends'], [1617333707, 'FEI launch'], [1620156420, 'UNI V3 Launch']], 'methodology': "Counts the tokens locked on AMM pools, pulling the data from the 'ianlapham/uniswapv2' subgraph", 'slug': 'uniswap-v3', 'tvl': 2734456201.489541, 'chainTvls': {'Sei': 4162512.432203086, 'Mantle': 3397768.3267060197, 'Taiko': 4128873.780316449, 'Polygon zkEVM': 3158793.0824544937, 'Manta': 241671.49689834713, 'Boba': 608180.9605343724, 'Moonbeam': 907195.2793089491, 'RSK': 14182889.545763813, 'Linea': 617261.4654806459, 'Filecoin': 2467940.280109644, 'Scroll': 672998.685511624, 'ZKsync Era': 7274136.997088498, 'Blast': 73441.40808280568, 'Optimism': 42578981.58742716, 'Binance': 25549947.58185481, 'Celo': 22526159.497819725, 'Avalanche': 11996942.471063817, 'Arbitrum': 274691969.9206442, 'Polygon': 224294524.76862562, 'Base': 110214903.14873527, 'Ethereum': 1980709108.7729115}, 'change_1h': 0.5152867753512425, 'change_1d': 3.2350963111560844, 'change_7d': 1.3924839835372893, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2524', 'name': 'Friends With Benefits', 'address': '0x35bD01FC9d6D5D81CA9E055Db88Dc49aa2c699A8', 'symbol': 'FWB', 'url': 'https://www.fwb.help/', 'description': 'A new kind of social network - owned by the creatives and builders who believe in the promise of a better internet', 'logo': 'https://icons.llama.fi/friends-with-benefits.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'friends-with-benefits-pro', 'cmcId': '10090', 'category': 'Services', 'chains': [], 'module': 'dummy.js', 'treasury': 'friendswithbenefits.js', 'twitter': 'FWBtweets', 'oracles': [], 'forkedFrom': [], 'governanceID': ['snapshot:friendswithbenefits.eth'], 'github': ['friends-with-benefits'], 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'friends-with-benefits', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '3277', 'name': 'dexSWAP', 'address': 'arbitrum:0x92a212d9f5eef0b262ac7d84aea64a0d0758b94f', 'symbol': 'GDEX', 'url': 'https://app.dexfinance.com/swap', 'description': 'Bringing the world tools to optimize and simplify DeFi investing.', 'chain': 'Arbitrum', 'logo': 'https://icons.llama.fi/dexswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Arbitrum'], 'module': 'dexswap-arbi/index.js', 'twitter': 'DexFinance', 'forkedFrom': ['Uniswap V2'], 'oracles': [], 'parentProtocol': 'parent#dexfinance', 'listedAt': 1690193404, 'misrepresentedTokens': True, 'slug': 'dexswap', 'tvl': 152532.14783762654, 'chainTvls': {'Arbitrum': 152532.14783762654}, 'change_1h': 0.34152794724475655, 'change_1d': -0.5450860017206054, 'change_7d': 26.67162000381802, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '240', 'name': 'Polygon Bridge & Staking', 'address': '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', 'symbol': 'MATIC', 'url': 'https://polygon.technology/', 'description': 'Ethereum sidechain\r\n', 'chain': 'Polygon', 'logo': 'https://icons.llama.fi/polygon.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'matic-network', 'cmcId': '3890', 'category': 'Chain', 'chains': ['Polygon'], 'module': 'polygon/index.js', 'twitter': '0xPolygon', 'slug': 'polygon-bridge-&-staking', 'tvl': 2575045914.6293235, 'chainTvls': {'Polygon': 2575045914.6293235}, 'change_1h': 0.2814199547446492, 'change_1d': 0.7287016114487841, 'change_7d': -44.391155112485826, 'tokenBreakdowns': {}, 'mcap': 1346301462.8532102}, {'id': '3777', 'name': 'Arbitrum Bridge', 'address': 'arbitrum:0x912ce59144191c1204e64559fe8253a0e49e6548', 'symbol': 'ARB', 'url': 'https://bridge.arbitrum.io', 'description': "The Arbitrum Bridge acts as a secure channel connecting Ethereum's mainnet (Layer-1) with the Arbitrum Rollup (Layer-2). This bridge allows users to transfer assets, like ETH or ERC-20 tokens, between these layers", 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/arbitrum-bridge.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Chain', 'chains': ['Ethereum'], 'oracles': [], 'forkedFrom': [], 'module': 'arbitrum/index.js', 'twitter': 'arbitrum', 'slug': 'arbitrum-bridge', 'tvl': 8658134698.498148, 'chainTvls': {'Ethereum': 8658134698.498148}, 'change_1h': 0.5312675587974383, 'change_1d': 1.3455754668588042, 'change_7d': -1.4826181225355128, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1072', 'name': 'IFSwap', 'address': 'csc:0x6925435f9d1cb710abeb680ec7ef3f8c5e1b2639', 'symbol': 'IFS', 'url': 'https://ifswap.finance', 'description': 'IFSwap is an open AMM model dex protocol for CSC.', 'chain': 'CSC', 'logo': 'https://icons.llama.fi/ifswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['CSC'], 'module': 'ifswap/index.js', 'twitter': 'if_networks', 'forkedFrom': ['Uniswap V2'], 'listedAt': 1640105053, 'misrepresentedTokens': True, 'methodology': 'We count liquidity of all paris through Factory Contract and Pools (single tokens) seccions through MasterChef Contract.', 'slug': 'ifswap', 'tvl': 846.2045921991258, 'chainTvls': {'CSC': 846.2045921991258}, 'change_1h': 0.6559307292427263, 'change_1d': -1.3715784784313598, 'change_7d': 6.068712262692102, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1265', 'name': 'X', 'address': '0x7f3141c4d6b047fb930991b450f1ed996a51cb26', 'symbol': 'X', 'url': 'https://x.xyz', 'description': 'X is a multichain decentralised NFT marketplace that is owned and operated by the NFT community. Governance is provided by the X DAO with voting rights given to token holders.', 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/x.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'x-2', 'cmcId': '16727', 'category': 'Services', 'chains': ['Ethereum'], 'module': 'x-xyz/index.js', 'twitter': 'Xdotxyz', 'listedAt': 1642194932, 'methodology': 'TVL for X.xyz consists of the staking of X into veX.', 'slug': 'x', 'tvl': 0, 'chainTvls': {'Ethereum': 0, 'Ethereum-staking': 0, 'staking': 0}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None, 'staking': 0}, {'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': ['Arbitrum', 'Filecoin', 'Moonbeam', 'Optimism', 'Mantle', 'Polygon zkEVM', 'CSC', 'Blast', 'Scroll', 'RSK', 'Celo', 'Taiko', 'Binance', 'Neon', 'Sei', 'Boba', 'ZKsync Era', 'Linea', 'Ethereum', 'Avalanche', 'Polygon', 'Manta', 'Base'], 'categories': ['Services', 'Dexes', 'Chain', 'Lending']}
+2024-09-11 00:51:04,371 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:51:19,681 - __main__ - DEBUG - Sending long message (length: 2912)
+2024-09-11 00:51:19,682 - __main__ - DEBUG - Message split into 2 parts
+2024-09-11 00:51:20,225 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:51:20,225 - __main__ - DEBUG - Sending long message (length: 6216)
+2024-09-11 00:51:20,226 - __main__ - DEBUG - Message split into 4 parts
+2024-09-11 00:51:25,950 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:51:25,951 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:53:22,610 - __main__ - INFO - Starting the bot
+2024-09-11 00:53:25,825 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:53:25,825 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:53:35,998 - __main__ - INFO - Received defi command: how does camelot compare with other dexs on arbitrum
+2024-09-11 00:53:36,819 - __main__ - INFO - Query analysis: {'protocols': [{'id': '4658', 'name': 'lendOS', 'address': None, 'symbol': '-', 'url': 'https://lendos.org/', 'description': 'Fastest lending, liquidity & leverage end-point for NeonEVM & Solana ecosystem', 'chain': 'Neon', 'logo': 'https://icons.llama.fi/lendos.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Lending', 'chains': ['Neon'], 'module': 'lendOS/index.js', 'forkedFrom': [], 'oracles': [], 'twitter': 'lendOSorg', 'listedAt': 1716396261, 'methodology': "Counts the tokens locked in the contracts to be used as collateral to borrow or to earn yield. Borrowed coins are not counted towards the TVL, so only the coins actually locked in the contracts are counted. There's multiple reasons behind this but one of the main ones is to avoid inflating the TVL through cycled lending.", 'slug': 'lendos', 'tvl': 448407.95022227336, 'chainTvls': {'Neon': 448407.95022227336, 'Neon-borrowed': 76132.17483582076, 'borrowed': 76132.17483582076}, 'change_1h': -0.5775019858440515, 'change_1d': -5.146373851411255, 'change_7d': 1.437373644695981, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2792', 'name': 'Camelot V3', 'address': 'arbitrum:0x3d9907F9a368ad0a51Be60f7Da3b97cf940982D8', 'symbol': 'GRAIL', 'url': 'https://camelot.exchange/', 'description': 'Concentrated liquidity AMM on Arbitrum', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/camelot-v3.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Arbitrum', 'Xai', 'Sanko', 'Reya Network', 'Rari'], 'module': 'camelot-v2/index.js', 'twitter': 'CamelotDEX', 'forkedFrom': ['Algebra DEX'], 'oracles': [], 'parentProtocol': 'parent#camelot', 'listedAt': 1680972349, 'slug': 'camelot-v3', 'tvl': 84185131.4194674, 'chainTvls': {'Rari': 437.25176752775684, 'Xai': 386847.5390231756, 'Reya Network': 8052.904069209498, 'Sanko': 267694.13247223495, 'Arbitrum': 83522099.59213525}, 'change_1h': 0.9367716162150401, 'change_1d': -0.4993843110062386, 'change_7d': 2.502473333249327, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '2524', 'name': 'Friends With Benefits', 'address': '0x35bD01FC9d6D5D81CA9E055Db88Dc49aa2c699A8', 'symbol': 'FWB', 'url': 'https://www.fwb.help/', 'description': 'A new kind of social network - owned by the creatives and builders who believe in the promise of a better internet', 'logo': 'https://icons.llama.fi/friends-with-benefits.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'friends-with-benefits-pro', 'cmcId': '10090', 'category': 'Services', 'chains': [], 'module': 'dummy.js', 'treasury': 'friendswithbenefits.js', 'twitter': 'FWBtweets', 'oracles': [], 'forkedFrom': [], 'governanceID': ['snapshot:friendswithbenefits.eth'], 'github': ['friends-with-benefits'], 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'friends-with-benefits', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '3277', 'name': 'dexSWAP', 'address': 'arbitrum:0x92a212d9f5eef0b262ac7d84aea64a0d0758b94f', 'symbol': 'GDEX', 'url': 'https://app.dexfinance.com/swap', 'description': 'Bringing the world tools to optimize and simplify DeFi investing.', 'chain': 'Arbitrum', 'logo': 'https://icons.llama.fi/dexswap.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Dexes', 'chains': ['Arbitrum'], 'module': 'dexswap-arbi/index.js', 'twitter': 'DexFinance', 'forkedFrom': ['Uniswap V2'], 'oracles': [], 'parentProtocol': 'parent#dexfinance', 'listedAt': 1690193404, 'misrepresentedTokens': True, 'slug': 'dexswap', 'tvl': 152532.14783762654, 'chainTvls': {'Arbitrum': 152532.14783762654}, 'change_1h': 0.34152794724475655, 'change_1d': -0.5450860017206054, 'change_7d': 26.67162000381802, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '240', 'name': 'Polygon Bridge & Staking', 'address': '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', 'symbol': 'MATIC', 'url': 'https://polygon.technology/', 'description': 'Ethereum sidechain\r\n', 'chain': 'Polygon', 'logo': 'https://icons.llama.fi/polygon.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'matic-network', 'cmcId': '3890', 'category': 'Chain', 'chains': ['Polygon'], 'module': 'polygon/index.js', 'twitter': '0xPolygon', 'slug': 'polygon-bridge-&-staking', 'tvl': 2575045914.6293235, 'chainTvls': {'Polygon': 2575045914.6293235}, 'change_1h': 0.2814199547446492, 'change_1d': 0.7287016114487841, 'change_7d': -44.391155112485826, 'tokenBreakdowns': {}, 'mcap': 1346301462.8532102}, {'id': '3777', 'name': 'Arbitrum Bridge', 'address': 'arbitrum:0x912ce59144191c1204e64559fe8253a0e49e6548', 'symbol': 'ARB', 'url': 'https://bridge.arbitrum.io', 'description': "The Arbitrum Bridge acts as a secure channel connecting Ethereum's mainnet (Layer-1) with the Arbitrum Rollup (Layer-2). This bridge allows users to transfer assets, like ETH or ERC-20 tokens, between these layers", 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/arbitrum-bridge.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Chain', 'chains': ['Ethereum'], 'oracles': [], 'forkedFrom': [], 'module': 'arbitrum/index.js', 'twitter': 'arbitrum', 'slug': 'arbitrum-bridge', 'tvl': 8658134698.498148, 'chainTvls': {'Ethereum': 8658134698.498148}, 'change_1h': 0.5312675587974383, 'change_1d': 1.3455754668588042, 'change_7d': -1.4826181225355128, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '1265', 'name': 'X', 'address': '0x7f3141c4d6b047fb930991b450f1ed996a51cb26', 'symbol': 'X', 'url': 'https://x.xyz', 'description': 'X is a multichain decentralised NFT marketplace that is owned and operated by the NFT community. Governance is provided by the X DAO with voting rights given to token holders.', 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/x.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'x-2', 'cmcId': '16727', 'category': 'Services', 'chains': ['Ethereum'], 'module': 'x-xyz/index.js', 'twitter': 'Xdotxyz', 'listedAt': 1642194932, 'methodology': 'TVL for X.xyz consists of the staking of X into veX.', 'slug': 'x', 'tvl': 0, 'chainTvls': {'Ethereum': 0, 'Ethereum-staking': 0, 'staking': 0}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': None, 'staking': 0}, {'id': '2785', 'name': 'Arbitrum', 'address': 'arbitrum:0x912CE59144191C1204E64559FE8253a0e49E6548', 'symbol': 'ARB', 'url': 'https://arbitrum.foundation/', 'description': 'A technology suite designed to scale Ethereum.', 'logo': 'https://icons.llama.fi/arbitrum.png', 'audits': '0', 'audit_note': None, 'gecko_id': 'arbitrum', 'cmcId': '11841', 'category': 'Chain', 'chains': [], 'oracles': [], 'forkedFrom': [], 'module': 'dummy.js', 'twitter': 'arbitrum', 'misrepresentedTokens': False, 'hallmarks': [], 'slug': 'arbitrum', 'tvl': 0, 'chainTvls': {}, 'change_1h': None, 'change_1d': None, 'change_7d': None, 'tokenBreakdowns': {}, 'mcap': 1866290310.5045435}], 'chains': ['Neon', 'Arbitrum', 'Ethereum', 'Xai', 'Polygon', 'Sanko', 'Reya Network', 'Rari'], 'categories': ['Services', 'Lending', 'Dexes', 'Chain']}
+2024-09-11 00:53:36,820 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:53:51,319 - __main__ - DEBUG - Sending long message (length: 3001)
+2024-09-11 00:53:51,319 - __main__ - DEBUG - Message split into 2 parts
+2024-09-11 00:53:51,846 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:53:51,847 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:57:19,236 - __main__ - INFO - Starting the bot
+2024-09-11 00:57:22,474 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:57:22,474 - __main__ - INFO - Loaded 4894 protocols from DefiLlama data
+2024-09-11 00:57:27,675 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 00:57:27,966 - __main__ - INFO - Query analysis: {'protocols': [{'id': '2626', 'name': 'ether.fi Stake', 'address': '0xfe0c30065b384f05761f15d0cc899d4f9f9cc0eb', 'symbol': 'ETHFI', 'url': 'https://app.ether.fi/eeth', 'description': 'Decentralized and non-custodial Ethereum staking protocol.', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/ether.fi.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Liquid Restaking', 'chains': ['Ethereum', 'Arbitrum'], 'module': 'ether-fi/index.js', 'twitter': 'ether_fi', 'oracles': [], 'forkedFrom': [], 'parentProtocol': 'parent#ether-fi', 'listedAt': 1677778460, 'slug': 'ether.fi-stake', 'tvl': 4761695921.518489, 'chainTvls': {'Ethereum-staking': 12418845.865629539, 'Ethereum': 4761695921.518489, 'Arbitrum-staking': 2760917.025557335, 'staking': 15179762.891186874}, 'change_1h': 0.9064718914272305, 'change_1d': 1.6677145129727364, 'change_7d': -2.0761309523850855, 'tokenBreakdowns': {}, 'mcap': None, 'staking': 15179762.891186874}, {'id': '4593', 'name': 'Free Protocol', 'address': None, 'symbol': '-', 'url': 'https://free.tech/', 'description': 'Free your assets early with http://free.tech. Instantly liquify your staked assets and unlock extra yield potential.', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/free-protocol.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Bridge', 'chains': ['Merlin', 'Binance', 'Ethereum', 'Arbitrum', 'Manta', 'Kroma', 'Polygon'], 'oracles': [], 'forkedFrom': [], 'module': 'free-protocol/index.js', 'twitter': 'FreeLayer2', 'listedAt': 1715625738, 'slug': 'free-protocol', 'tvl': 1022857111.2508284, 'chainTvls': {'Kroma': 0, 'Arbitrum': 410685.90184079163, 'Ethereum': 4145822.1019896865, 'Polygon': 0, 'Binance': 360588406.88331115, 'Merlin': 657594842.683908, 'Manta': 117353.67977873226}, 'change_1h': 0.5857810245954624, 'change_1d': 5.586413608716413, 'change_7d': 2.3901024359924747, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '240', 'name': 'Polygon Bridge & Staking', 'address': '0x7d1afa7b718fb893db30a3abc0cfc608aacfebb0', 'symbol': 'MATIC', 'url': 'https://polygon.technology/', 'description': 'Ethereum sidechain\r\n', 'chain': 'Polygon', 'logo': 'https://icons.llama.fi/polygon.jpg', 'audits': '0', 'audit_note': None, 'gecko_id': 'matic-network', 'cmcId': '3890', 'category': 'Chain', 'chains': ['Polygon'], 'module': 'polygon/index.js', 'twitter': '0xPolygon', 'slug': 'polygon-bridge-&-staking', 'tvl': 2575045914.6293235, 'chainTvls': {'Polygon': 2575045914.6293235}, 'change_1h': 0.2814199547446492, 'change_1d': 0.7287016114487841, 'change_7d': -44.391155112485826, 'tokenBreakdowns': {}, 'mcap': 1346301462.8532102}, {'id': '3777', 'name': 'Arbitrum Bridge', 'address': 'arbitrum:0x912ce59144191c1204e64559fe8253a0e49e6548', 'symbol': 'ARB', 'url': 'https://bridge.arbitrum.io', 'description': "The Arbitrum Bridge acts as a secure channel connecting Ethereum's mainnet (Layer-1) with the Arbitrum Rollup (Layer-2). This bridge allows users to transfer assets, like ETH or ERC-20 tokens, between these layers", 'chain': 'Ethereum', 'logo': 'https://icons.llama.fi/arbitrum-bridge.png', 'audits': '0', 'audit_note': None, 'gecko_id': None, 'cmcId': None, 'category': 'Chain', 'chains': ['Ethereum'], 'oracles': [], 'forkedFrom': [], 'module': 'arbitrum/index.js', 'twitter': 'arbitrum', 'slug': 'arbitrum-bridge', 'tvl': 8658134698.498148, 'chainTvls': {'Ethereum': 8658134698.498148}, 'change_1h': 0.5312675587974383, 'change_1d': 1.3455754668588042, 'change_7d': -1.4826181225355128, 'tokenBreakdowns': {}, 'mcap': None}, {'id': '148', 'name': 'Tornado Cash', 'address': '0x77777feddddffc19ff86db637967013e6c6a116c', 'symbol': 'TORN', 'url': 'https://tornado.ws/', 'description': 'Non-custodial anonymous transactions on Ethereum.', 'chain': 'Multi-Chain', 'logo': 'https://icons.llama.fi/tornado-cash.jpg', 'audits': '2', 'audit_note': None, 'gecko_id': 'tornado-cash', 'cmcId': '8049', 'category': 'Privacy', 'chains': ['Ethereum', 'Binance', 'Arbitrum', 'Polygon', 'Avalanche', 'xDai', 'Optimism'], 'module': 'tornado/index.js', 'twitter': 'TornadoCash', 'audit_links': ['https://tornado.cash/#faq'], 'oracles': [], 'treasury': 'tornado-cash.js', 'github': ['tornadocash'], 'deadUrl': True, 'slug': 'tornado-cash', 'tvl': 457410007.4399508, 'chainTvls': {'Ethereum': 416425336.8178509, 'Optimism': 27289.96, 'Binance': 40015028.089999996, 'Avalanche': 143258.4, 'xDai': 51451.399999999994, 'Arbitrum': 581394.8, 'Polygon': 166247.97209999998}, 'change_1h': 0.7608692577730949, 'change_1d': 2.2321673507917694, 'change_7d': 3.0658109688730235, 'tokenBreakdowns': {}, 'mcap': 8824681.501393514}], 'chains': ['Manta', 'Optimism', 'Avalanche', 'Merlin', 'xDai', 'Ethereum', 'Polygon', 'Kroma', 'Arbitrum', 'Binance'], 'categories': ['Bridge', 'Liquid Restaking', 'Chain', 'Privacy']}
+2024-09-11 00:57:27,966 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:57:34,967 - __main__ - DEBUG - Sending long message (length: 2500)
+2024-09-11 00:57:34,968 - __main__ - DEBUG - Message split into 2 parts
+2024-09-11 00:57:35,538 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:57:35,538 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:59:33,333 - __main__ - INFO - Starting the bot
+2024-09-11 00:59:36,423 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 00:59:43,120 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 00:59:43,324 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 00:59:51,680 - __main__ - DEBUG - Sending long message (length: 1370)
+2024-09-11 00:59:52,009 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:59:52,009 - __main__ - INFO - Defi command completed successfully
+2024-09-11 00:59:54,532 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 00:59:54,752 - __main__ - INFO - Exact cache hit for question: DeFi question: whats the top protocols on arb rn
+2024-09-11 00:59:54,753 - __main__ - INFO - Using cached Perplexity response
+2024-09-11 00:59:54,753 - __main__ - DEBUG - Sending long message (length: 1370)
+2024-09-11 00:59:55,048 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 00:59:55,048 - __main__ - INFO - Defi command completed successfully
+2024-09-11 01:00:01,574 - __main__ - INFO - Starting the bot
+2024-09-11 01:00:06,139 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:00:07,196 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 01:00:07,412 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 01:00:16,227 - __main__ - DEBUG - Sending long message (length: 1627)
+2024-09-11 01:00:16,550 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 01:00:16,550 - __main__ - INFO - Defi command completed successfully
+2024-09-11 01:01:27,896 - __main__ - INFO - Starting the bot
+2024-09-11 01:01:31,330 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:01:33,004 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 01:01:33,321 - __main__ - INFO - No cache hit, fetching new Perplexity response
+2024-09-11 01:01:39,690 - __main__ - DEBUG - Sending long message (length: 1461)
+2024-09-11 01:01:39,971 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 01:01:39,972 - __main__ - INFO - Defi command completed successfully
+2024-09-11 01:01:40,882 - __main__ - ERROR - An error occurred: You are on cooldown. Try again in 2.12s
+2024-09-11 01:01:40,882 - __main__ - ERROR - NoneType: None
+
+2024-09-11 01:01:43,922 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 01:01:44,175 - __main__ - INFO - Exact cache hit for question: DeFi question: whats the top protocols on arb rn
+2024-09-11 01:01:44,176 - __main__ - INFO - Using cached Perplexity response
+2024-09-11 01:01:44,176 - __main__ - DEBUG - Sending long message (length: 1461)
+2024-09-11 01:01:44,420 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 01:01:44,420 - __main__ - INFO - Defi command completed successfully
+2024-09-11 01:01:48,286 - __main__ - INFO - Starting the bot
+2024-09-11 01:01:51,435 - __main__ - INFO - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:01:52,737 - __main__ - INFO - Received defi command: whats the top protocols on arb rn
+2024-09-11 01:01:52,964 - __main__ - INFO - Exact cache hit for question: DeFi question: whats the top protocols on arb rn
+2024-09-11 01:01:52,965 - __main__ - INFO - Using cached Perplexity response
+2024-09-11 01:01:52,965 - __main__ - DEBUG - Sending long message (length: 1461)
+2024-09-11 01:01:53,282 - __main__ - DEBUG - Long message sent successfully
+2024-09-11 01:01:53,283 - __main__ - INFO - Defi command completed successfully
+[1mPyNaCl is not installed, voice will NOT be supported[0m
+[1mon_ready has successfully been registered as an event[0m
+[1mon_command_error has successfully been registered as an event[0m
+[2m2024-09-10T23:08:24.489892Z[0m [[32m[1minfo     [0m] [1mStarting the bot              [0m [[0m[1m[34m__main__[0m][0m
+[1mUsing selector: KqueueSelector[0m
+[1mlogging in using static token [0m
+[1mShard ID None has connected to Gateway (Session ID: 18ad2c9ef6ac44a80624fa5cab4b3318).[0m
+[2m2024-09-10T23:08:27.657612Z[0m [[32m[1minfo     [0m] [1mSecurePath AI Agent#6382 has connected to Discord![0m [[0m[1m[34m__main__[0m][0m
+[1mPyNaCl is not installed, voice will NOT be supported[0m
+[1mon_ready has successfully been registered as an event[0m
+[1mon_command_error has successfully been registered as an event[0m
+[2m2024-09-10T23:08:37.603711Z[0m [[32m[1minfo     [0m] [1mStarting the bot              [0m [[0m[1m[34m__main__[0m][0m
+[1mUsing selector: KqueueSelector[0m
+[1mlogging in using static token [0m
+[1mShard ID None has connected to Gateway (Session ID: 7083ac4f9b28c167a2406e89992eaffe).[0m
+[2m2024-09-10T23:08:40.829697Z[0m [[32m[1minfo     [0m] [1mSecurePath AI Agent#6382 has connected to Discord![0m [[0m[1m[34m__main__[0m][0m
+PyNaCl is not installed, voice will NOT be supported
+[2m2024-09-10T23:09:51.853299Z[0m [[32m[1minfo     [0m] [1mStarting the bot              [0m [[0m[1m[34m__main__[0m][0m
+logging in using static token
+[2m2024-09-10T23:09:54.970623Z[0m [[32m[1minfo     [0m] [1mSecurePath AI Agent#6382 has connected to Discord![0m [[0m[1m[34m__main__[0m][0m
+2024-09-11 01:10:46,173 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:11:00,569 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:11:12,956 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:11:12,957 [INFO] Starting the bot
+2024-09-11 01:11:12,957 [INFO] logging in using static token
+2024-09-11 01:11:16,144 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:11:48,033 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:11:48,033 [INFO] Starting the bot
+2024-09-11 01:11:48,034 [INFO] logging in using static token
+2024-09-11 01:11:51,267 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:12:23,569 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:12:23,570 [INFO] Starting the bot
+2024-09-11 01:12:23,570 [INFO] logging in using static token
+2024-09-11 01:12:26,680 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:12:36,285 [INFO] Received defi command: whats the top protocols on the base network rn
+2024-09-11 01:12:36,543 [ERROR] Unexpected error in defi command
+Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 189, in defi
+    response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
+  File "/Users/fortune/Code/main.py", line 135, in get_perplexity_response_with_retry
+    cached_response = get_cached_response(question)
+  File "/Users/fortune/Code/main.py", line 69, in get_cached_response
+    return perplexity_cache.get(question.lower().strip())
+NameError: name 'perplexity_cache' is not defined
+2024-09-11 01:12:58,622 [INFO] Received defi command: whats the top protocols on the base network rn
+2024-09-11 01:12:58,978 [ERROR] Unexpected error in defi command
+Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 189, in defi
+    response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
+  File "/Users/fortune/Code/main.py", line 135, in get_perplexity_response_with_retry
+    cached_response = get_cached_response(question)
+  File "/Users/fortune/Code/main.py", line 69, in get_cached_response
+    return perplexity_cache.get(question.lower().strip())
+NameError: name 'perplexity_cache' is not defined
+2024-09-11 01:13:33,597 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:13:33,597 [INFO] Starting the bot
+2024-09-11 01:13:33,598 [INFO] logging in using static token
+2024-09-11 01:13:36,731 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:13:37,098 [INFO] Received defi command: whats the top protocols on the base network rn
+2024-09-11 01:13:37,297 [ERROR] Unexpected error in defi command
+Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 189, in defi
+    response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
+  File "/Users/fortune/Code/main.py", line 135, in get_perplexity_response_with_retry
+    cached_response = get_cached_response(question)
+  File "/Users/fortune/Code/main.py", line 69, in get_cached_response
+    return perplexity_cache.get(question.lower().strip())
+NameError: name 'perplexity_cache' is not defined
+2024-09-11 01:13:43,286 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:13:43,287 [INFO] Starting the bot
+2024-09-11 01:13:43,287 [INFO] logging in using static token
+2024-09-11 01:13:46,007 [INFO] Received defi command: whats the top protocols on the base network rn
+2024-09-11 01:13:46,217 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:13:46,764 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:15:21,917 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:15:21,918 [INFO] Starting the bot
+2024-09-11 01:15:21,918 [INFO] logging in using static token
+2024-09-11 01:15:25,083 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:15:25,084 [INFO] Bot is active in 1 guilds
+2024-09-11 01:15:36,329 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:15:36,331 [INFO] Question: whats the top protocols on solana rn
+2024-09-11 01:15:36,575 [INFO] Attempting to get response for question: 'DeFi question: whats the top protocols on solana r...'
+2024-09-11 01:15:36,577 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:15:36,577 [INFO] Fetching Perplexity response for question: 'DeFi question: whats the top protocols on solana r...'
+2024-09-11 01:15:50,767 [INFO] Received successful response from Perplexity API (length: 2430)
+2024-09-11 01:15:50,772 [INFO] Total time to get response: 14.196s
+2024-09-11 01:15:50,773 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:15:50,774 [INFO] Sending long message (length: 2447)
+2024-09-11 01:15:51,340 [INFO] Total command processing time: 14.764s
+2024-09-11 01:22:10,002 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:22:10,005 [INFO] Question: whats the best token in the world
+2024-09-11 01:22:10,483 [INFO] Attempting to get response for question: 'DeFi question: whats the best token in the world...'
+2024-09-11 01:22:10,485 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:22:10,486 [INFO] Fetching Perplexity response for question: 'DeFi question: whats the best token in the world...'
+2024-09-11 01:22:21,957 [INFO] Received successful response from Perplexity API (length: 2228)
+2024-09-11 01:22:21,959 [INFO] Total time to get response: 11.476s
+2024-09-11 01:22:21,960 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:22:21,960 [INFO] Sending long message (length: 2245)
+2024-09-11 01:22:22,635 [INFO] Total command processing time: 12.152s
+2024-09-11 01:26:33,558 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:26:33,559 [INFO] Starting the bot
+2024-09-11 01:26:33,559 [INFO] logging in using static token
+2024-09-11 01:26:36,715 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:26:36,716 [INFO] Bot is active in 1 guilds
+2024-09-11 01:27:02,764 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:27:02,766 [INFO] Question: dogecoin to the moon
+2024-09-11 01:27:03,217 [INFO] Attempting to get response for question: 'DeFi question: dogecoin to the moon...'
+2024-09-11 01:27:03,218 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:27:03,218 [INFO] Fetching Perplexity response for question: 'DeFi question: dogecoin to the moon...'
+2024-09-11 01:27:14,942 [INFO] Received successful response from Perplexity API (length: 2237)
+2024-09-11 01:27:14,949 [INFO] Total time to get response: 11.732s
+2024-09-11 01:27:14,950 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:27:14,951 [INFO] Sending long message (length: 2254)
+2024-09-11 01:27:15,441 [INFO] Total command processing time: 12.224s
+2024-09-11 01:29:14,970 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:29:14,970 [INFO] Starting the bot
+2024-09-11 01:29:14,970 [INFO] logging in using static token
+2024-09-11 01:29:18,549 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:29:18,550 [INFO] Bot is active in 1 guilds
+2024-09-11 01:29:19,835 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:29:19,836 [INFO] Question: dogecoin to the moon
+2024-09-11 01:29:20,086 [INFO] Attempting to get response for question: 'DeFi question: dogecoin to the moon...'
+2024-09-11 01:29:20,087 [INFO] Using cached Perplexity response
+2024-09-11 01:29:20,087 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:29:20,088 [INFO] Sending long message (length: 2254)
+2024-09-11 01:29:20,614 [INFO] Total command processing time: 0.528s
+2024-09-11 01:29:27,618 [INFO] Cooldown triggered for user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:29:31,494 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:29:31,495 [INFO] Question: gm ser
+2024-09-11 01:29:31,708 [INFO] Attempting to get response for question: 'DeFi question: gm ser...'
+2024-09-11 01:29:31,709 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:29:31,709 [INFO] Fetching Perplexity response for question: 'DeFi question: gm ser...'
+2024-09-11 01:29:46,626 [INFO] Received successful response from Perplexity API (length: 3145)
+2024-09-11 01:29:46,636 [INFO] Total time to get response: 14.927s
+2024-09-11 01:29:46,636 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:29:46,637 [INFO] Sending long message (length: 3162)
+2024-09-11 01:29:47,160 [INFO] Total command processing time: 15.452s
+2024-09-11 01:31:37,034 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:31:37,036 [INFO] Question: arbitrum vs base network
+2024-09-11 01:31:37,398 [INFO] Attempting to get response for question: 'DeFi question: arbitrum vs base network...'
+2024-09-11 01:31:37,400 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:31:37,400 [INFO] Fetching Perplexity response for question: 'DeFi question: arbitrum vs base network...'
+2024-09-11 01:31:54,910 [INFO] Received successful response from Perplexity API (length: 3258)
+2024-09-11 01:31:54,913 [INFO] Total time to get response: 17.515s
+2024-09-11 01:31:54,913 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:31:54,913 [INFO] Sending long message (length: 3275)
+2024-09-11 01:31:55,540 [INFO] Total command processing time: 18.143s
+2024-09-11 01:32:13,001 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:32:13,002 [INFO] Starting the bot
+2024-09-11 01:32:13,002 [INFO] logging in using static token
+2024-09-11 01:32:16,215 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:32:16,216 [INFO] Bot is active in 1 guilds
+2024-09-11 01:32:45,999 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:32:46,000 [INFO] Question: solana vs sei network
+2024-09-11 01:32:46,300 [INFO] Attempting to get response for question: 'DeFi question: solana vs sei network...'
+2024-09-11 01:32:46,301 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:32:46,302 [INFO] Fetching Perplexity response for question: 'DeFi question: solana vs sei network...'
+2024-09-11 01:33:03,165 [INFO] Received successful response from Perplexity API (length: 3456)
+2024-09-11 01:33:03,170 [INFO] Total time to get response: 16.870s
+2024-09-11 01:33:03,171 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:33:03,171 [INFO] Sending long message (length: 3456)
+2024-09-11 01:33:03,765 [INFO] Total command processing time: 17.465s
+2024-09-11 01:34:19,618 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:34:19,619 [INFO] Starting the bot
+2024-09-11 01:34:19,619 [INFO] logging in using static token
+2024-09-11 01:34:22,792 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:34:22,794 [INFO] Bot is active in 1 guilds
+2024-09-11 01:34:25,771 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:34:25,771 [INFO] Question: sui vs sei
+2024-09-11 01:34:25,997 [INFO] Attempting to get response for question: 'DeFi question: sui vs sei...'
+2024-09-11 01:34:25,998 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 01:34:25,998 [INFO] Fetching Perplexity response for question: 'DeFi question: sui vs sei...'
+2024-09-11 01:34:45,652 [INFO] Received successful response from Perplexity API (length: 3336)
+2024-09-11 01:34:45,658 [INFO] Total time to get response: 19.661s
+2024-09-11 01:34:45,658 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:34:45,659 [INFO] Sending long message (length: 3336)
+2024-09-11 01:34:45,874 [ERROR] Unexpected error in defi command for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/main.py", line 233, in defi
+    await send_long_message(ctx, response)
+  File "/Users/fortune/Code/main.py", line 202, in send_long_message
+    await ctx.send(part)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/context.py", line 1039, in send
+    return await super().send(
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/abc.py", line 1618, in send
+    data = await state.http.send_message(channel.id, params=params)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/http.py", line 758, in request
+    raise HTTPException(response, data)
+discord.errors.HTTPException: 400 Bad Request (error code: 50035): Invalid Form Body
+In content: Must be 2000 or fewer in length.
+2024-09-11 01:34:46,210 [INFO] Total command processing time: 20.214s
+2024-09-11 01:35:22,410 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:35:22,411 [INFO] Starting the bot
+2024-09-11 01:35:22,411 [INFO] logging in using static token
+2024-09-11 01:35:25,698 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:35:25,699 [INFO] Bot is active in 1 guilds
+2024-09-11 01:35:26,604 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:35:26,604 [INFO] Question: sui vs sei
+2024-09-11 01:35:26,862 [INFO] Attempting to get response for question: 'DeFi question: sui vs sei...'
+2024-09-11 01:35:26,863 [INFO] Using cached Perplexity response
+2024-09-11 01:35:26,864 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:35:26,864 [INFO] Sending long message (length: 3336)
+2024-09-11 01:35:27,375 [INFO] Total command processing time: 0.512s
+2024-09-11 01:36:42,069 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 01:36:42,069 [INFO] Starting the bot
+2024-09-11 01:36:42,069 [INFO] logging in using static token
+2024-09-11 01:36:45,256 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 01:36:45,256 [INFO] Bot is active in 1 guilds
+2024-09-11 01:36:46,025 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:36:46,025 [INFO] Question: sui vs sei
+2024-09-11 01:36:46,261 [INFO] Attempting to get response for question: 'DeFi question: sui vs sei...'
+2024-09-11 01:36:46,261 [INFO] Using cached Perplexity response
+2024-09-11 01:36:46,262 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 01:36:46,262 [INFO] Sending long message (length: 3336)
+2024-09-11 01:36:46,862 [INFO] Total command processing time: 0.601s
