@@ -68,7 +68,7 @@ PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
-SYSTEM_PROMPT = """you’re a defi & crypto expert. give solid, up-to-date info—no fluff. focus on actionable advice. decentralized solutions FIRST, centralized ONLY if you have to. be sharp, precise. use citations [1], [2] when needed. highlight time-sensitive stuff. when telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. centralized? last resort. sarcasm welcome, but stay sharp. no easy-money seekers or bedtime stories here."""
+SYSTEM_PROMPT = """you're a defi & crypto expert. give solid, up-to-date info—no fluff. focus on actionable advice. decentralized solutions FIRST, centralized ONLY if you have to. be sharp, precise. use citations [1], [2] when needed. highlight time-sensitive stuff. when telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. centralized? last resort. sarcasm welcome, but stay sharp. no easy-money seekers or bedtime stories here."""
 
 # Helper functions
 @lru_cache(maxsize=1000)
@@ -262,11 +262,17 @@ async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         logger.info(f"Cooldown triggered for user {ctx.author} (ID: {ctx.author.id})")
         await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
+    elif isinstance(error, commands.MissingRequiredArgument):
+        logger.info(f"Missing required argument for user {ctx.author} (ID: {ctx.author.id}). Command: {ctx.command.name}")
+        if ctx.command.name == 'defi':
+            await ctx.send("Please provide a question after the !defi command. For example: `!defi What is yield farming?`")
+        else:
+            await ctx.send(f"You're missing a required argument for the {ctx.command.name} command. Please check the command usage and try again.")
     elif isinstance(error, commands.CommandInvokeError):
         logger.error(f"Command invoke error for user {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
         await ctx.send("An error occurred while processing your command. Please try again.")
     else:
-        logger.error(f"Unhandled error for user {ctx.author} (ID: {ctx.author.id})", exc_info=error)
+        logger.error(f"Unhandled error for user {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
 # Add this function to send a request to your bot's URL
@@ -283,11 +289,23 @@ async def keep_alive():
 
 # Modify your bot.run() call to include the keep_alive coroutine
 async def start_bot():
-    await asyncio.gather(
-        bot.start(DISCORD_TOKEN),
-        keep_alive()
-    )
+    try:
+        await asyncio.gather(
+            bot.start(DISCORD_TOKEN),
+            keep_alive()
+        )
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt. Shutting down...")
+    finally:
+        await bot.close()
+        logger.info("Bot has been shut down.")
 
-# Replace the existing bot.run() call with this
 if __name__ == "__main__":
-    asyncio.run(start_bot())
+    try:
+        asyncio.run(start_bot())
+    except KeyboardInterrupt:
+        logger.info("Received keyboard interrupt. Exiting...")
+    except Exception as e:
+        logger.error(f"Unexpected error occurred: {type(e).__name__}: {str(e)}")
+    finally:
+        logger.info("Bot script has ended.")
