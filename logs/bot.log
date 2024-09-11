@@ -633,3 +633,13 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-11 03:53:49,319 [INFO] Bot has been shut down.
 2024-09-11 03:53:49,321 [INFO] Received keyboard interrupt. Exiting...
 2024-09-11 03:53:49,321 [INFO] Bot script has ended.
+2024-09-11 04:02:59,101 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 04:03:02,472 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 04:03:02,472 [INFO] Bot is active in 1 guilds
+2024-09-11 04:03:03,647 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 04:03:03,648 [WARNING] No question provided by user fortunexbt (ID: 804823236222779413)
+2024-09-11 04:03:05,490 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 04:03:05,491 [WARNING] No question provided by user fortunexbt (ID: 804823236222779413)
+2024-09-11 04:03:37,054 [INFO] Bot has been shut down.
+2024-09-11 04:03:37,076 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 04:03:37,079 [INFO] Bot script has ended.
