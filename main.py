@@ -284,7 +284,7 @@ async def keep_alive():
 # Modify your bot.run() call to include the keep_alive coroutine
 async def start_bot():
     await asyncio.gather(
-        bot.start("YOUR_BOT_TOKEN"),
+        bot.start(DISCORD_TOKEN),
         keep_alive()
     )
 
