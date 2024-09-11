@@ -12,14 +12,12 @@ from functools import lru_cache
 import time
 from aiohttp import web
 
-# Move this block to the top of the file, right after imports
 log_directory = "logs"
 if not os.path.exists(log_directory):
     os.makedirs(log_directory)
 
 log_file = os.path.join(log_directory, "bot.log")
 
-# Configure color logging
 handler = colorlog.StreamHandler()
 handler.setFormatter(colorlog.ColoredFormatter(
     '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
@@ -47,7 +45,6 @@ logging.getLogger('discord').setLevel(logging.WARNING)
 logging.getLogger('discord.http').setLevel(logging.WARNING)
 logging.getLogger('discord.gateway').setLevel(logging.WARNING)
 
-# Load environment variables
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
@@ -69,7 +66,7 @@ PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
-SYSTEM_PROMPT = """you're a defi & crypto expert. give solid, up-to-date info—no fluff. focus on actionable advice. decentralized solutions FIRST, centralized ONLY if you have to. be sharp, precise. use citations [1], [2] when needed. highlight time-sensitive stuff. when telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. centralized? last resort. sarcasm welcome, but stay sharp. no easy-money seekers or bedtime stories here."""
+SYSTEM_PROMPT = """you're a defi & crypto expert. give solid, up-to-date info—no fluff. focus on actionable advice. decentralized solutions FIRST, centralized ONLY if you have to. be sharp, precise. use citations [1], [2] when needed. highlight time-sensitive stuff. when telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. centralized? last resort. sarcasm welcome, but stay sharp."""
 
 # Helper functions
 @lru_cache(maxsize=1000)
@@ -216,6 +213,9 @@ async def send_long_message(ctx, message):
     
     logger.debug("Long message sent successfully")
 
+# Add this near the top of your file, after imports
+user_locks = {}
+
 # Bot commands
 @bot.event
 async def on_ready():
@@ -224,51 +224,62 @@ async def on_ready():
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
-async def defi(ctx, *, question):
+async def defi(ctx, *, question=None):
+    # Remove cooldown for the specified user
+    if ctx.author.id == 804823236222779413:
+        ctx.command.reset_cooldown(ctx)
+
     logger.info(f"Received defi command from user {ctx.author} (ID: {ctx.author.id})")
+    
+    if question is None:
+        logger.warning(f"No question provided by user {ctx.author} (ID: {ctx.author.id})")
+        await ctx.send("Please provide a question after the !defi command. For example: `!defi What is yield farming?`")
+        return
+
     logger.info(f"Question: {question}")
     
-    if len(question) < 5:
-        logger.warning(f"Rejected short question from user {ctx.author} (ID: {ctx.author.id})")
-        await ctx.send("Please provide a more detailed question (at least 5 characters).")
-        return
-    if len(question) > 500:
-        logger.warning(f"Rejected long question from user {ctx.author} (ID: {ctx.author.id})")
-        await ctx.send("Your question is too long. Please limit it to 500 characters.")
-        return
+    # Use a lock to prevent duplicate processing
+    if ctx.author.id not in user_locks:
+        user_locks[ctx.author.id] = asyncio.Lock()
     
-    async with ctx.typing():
-        start_time = time.time()
-        try:
-            response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
-            
-            if response:
-                logger.info(f"Sending response to user {ctx.author} (ID: {ctx.author.id})")
-                await send_long_message(ctx, response)
-            else:
-                logger.warning(f"No response generated for user {ctx.author} (ID: {ctx.author.id})")
-                await ctx.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error for user {ctx.author} (ID: {ctx.author.id}): {str(e)}")
-            await ctx.send("I'm having trouble connecting to the AI service. Please try again later.")
-        except Exception as e:
-            logger.error(f"Unexpected error in defi command for user {ctx.author} (ID: {ctx.author.id})", exc_info=True)
-            await ctx.send("An unexpected error occurred. Our team has been notified.")
-        finally:
-            duration = time.time() - start_time
-            logger.info(f"Total command processing time: {duration:.3f}s")
+    async with user_locks[ctx.author.id]:
+        if len(question) < 5:
+            logger.warning(f"Rejected short question from user {ctx.author} (ID: {ctx.author.id})")
+            await ctx.send("Please provide a more detailed question (at least 5 characters).")
+            return
+        if len(question) > 500:
+            logger.warning(f"Rejected long question from user {ctx.author} (ID: {ctx.author.id})")
+            await ctx.send("Your question is too long. Please limit it to 500 characters.")
+            return
+        
+        async with ctx.typing():
+            start_time = time.time()
+            try:
+                response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
+                
+                if response:
+                    logger.info(f"Sending response to user {ctx.author} (ID: {ctx.author.id})")
+                    await send_long_message(ctx, response)
+                else:
+                    logger.warning(f"No response generated for user {ctx.author} (ID: {ctx.author.id})")
+                    await ctx.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
+            except aiohttp.ClientError as e:
+                logger.error(f"Network error for user {ctx.author} (ID: {ctx.author.id}): {str(e)}")
+                await ctx.send("I'm having trouble connecting to the AI service. Please try again later.")
+            except Exception as e:
+                logger.error(f"Unexpected error in defi command for user {ctx.author} (ID: {ctx.author.id})", exc_info=True)
+                await ctx.send("An unexpected error occurred. Our team has been notified.")
+            finally:
+                duration = time.time() - start_time
+                logger.info(f"Total command processing time: {duration:.3f}s")
 
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
-        logger.info(f"Cooldown triggered for user {ctx.author} (ID: {ctx.author.id})")
-        await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
-    elif isinstance(error, commands.MissingRequiredArgument):
-        logger.info(f"Missing required argument for user {ctx.author} (ID: {ctx.author.id}). Command: {ctx.command.name}")
-        if ctx.command.name == 'defi':
-            await ctx.send("Please provide a question after the !defi command. For example: `!defi What is yield farming?`")
-        else:
-            await ctx.send(f"You're missing a required argument for the {ctx.command.name} command. Please check the command usage and try again.")
+        # Skip cooldown message for the specified user
+        if ctx.author.id != 804823236222779413:
+            logger.info(f"Cooldown triggered for user {ctx.author} (ID: {ctx.author.id})")
+            await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
     elif isinstance(error, commands.CommandInvokeError):
         logger.error(f"Command invoke error for user {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
         await ctx.send("An error occurred while processing your command. Please try again.")
