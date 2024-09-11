@@ -269,10 +269,25 @@ async def on_command_error(ctx, error):
         logger.error(f"Unhandled error for user {ctx.author} (ID: {ctx.author.id})", exc_info=error)
         await ctx.send("An unexpected error occurred. Please try again.")
 
-# Main execution
+# Add this function to send a request to your bot's URL
+async def keep_alive():
+    url = "https://securepath-bot.onrender.com"  # Replace with your actual bot URL
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(url) as response:
+                    print(f"Keep-alive request sent. Status: {response.status}")
+            except Exception as e:
+                print(f"Error sending keep-alive request: {e}")
+            await asyncio.sleep(600)  # Wait for 10 minutes before the next request
+
+# Modify your bot.run() call to include the keep_alive coroutine
+async def start_bot():
+    await asyncio.gather(
+        bot.start("YOUR_BOT_TOKEN"),
+        keep_alive()
+    )
+
+# Replace the existing bot.run() call with this
 if __name__ == "__main__":
-    logger.info("Starting the bot")
-    try:
-        bot.run(DISCORD_TOKEN)
-    except Exception as e:
-        logger.critical("Failed to start the bot", exc_info=True)
+    asyncio.run(start_bot())
