@@ -1,94 +1,90 @@
 import os
 import asyncio
 import logging
+from logging.handlers import RotatingFileHandler
+import time
+from functools import lru_cache
+
+import aiohttp
+from aiohttp import web
 import colorlog
-from dotenv import load_dotenv
 import discord
 from discord.ext import commands
-import aiohttp
-from logging.handlers import RotatingFileHandler
 from diskcache import Cache
-from functools import lru_cache
-import time
-from aiohttp import web
+from dotenv import load_dotenv
 
-log_directory = "logs"
-if not os.path.exists(log_directory):
-    os.makedirs(log_directory)
-
-log_file = os.path.join(log_directory, "bot.log")
-
-handler = colorlog.StreamHandler()
-handler.setFormatter(colorlog.ColoredFormatter(
-    '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    log_colors={
-        'DEBUG': 'cyan',
-        'INFO': 'green',
-        'WARNING': 'yellow',
-        'ERROR': 'red',
-        'CRITICAL': 'red,bg_white',
-    }
-))
-
-logger = colorlog.getLogger()
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
-
-# Add file handler for logging to file
-file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=5)
-file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
-logger.addHandler(file_handler)
-
-# Suppress discord.py's built-in logging
-logging.getLogger('discord').setLevel(logging.WARNING)
-logging.getLogger('discord.http').setLevel(logging.WARNING)
-logging.getLogger('discord.gateway').setLevel(logging.WARNING)
-
+# Constants and Environment Setup
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
-
-# Initialize the cache
-cache_dir = "cache"
-if not os.path.exists(cache_dir):
-    os.makedirs(cache_dir)
-perplexity_cache = Cache(cache_dir)
-
-# Bot setup
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
-
-# Perplexity API setup
 PERPLEXITY_URL = os.getenv('PERPLEXITY_URL', "https://api.perplexity.ai/chat/completions")
 PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
-SYSTEM_PROMPT = """you're a defi & crypto expert. give solid, up-to-date info—no fluff. focus on actionable advice. decentralized solutions FIRST, centralized ONLY if you have to. be sharp, precise. use citations [1], [2] when needed. highlight time-sensitive stuff. when telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. centralized? last resort. sarcasm welcome, but stay sharp."""
+SYSTEM_PROMPT = """You're a DeFi & crypto expert. Give solid, up-to-date info—no fluff. Focus on actionable advice. Decentralized solutions FIRST, centralized ONLY if you have to. Be sharp, precise. Use citations [1], [2] when needed. Highlight time-sensitive stuff. When telling people how to buy/interact with protocols, hit DEXs & cross-chain bridges. Centralized? Last resort. Sarcasm welcome, but stay sharp."""
 
-# Helper functions
+# Logging Setup
+def setup_logging():
+    log_directory = "logs"
+    os.makedirs(log_directory, exist_ok=True)
+    log_file = os.path.join(log_directory, "bot.log")
+
+    logger = colorlog.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # Console handler
+    console_handler = colorlog.StreamHandler()
+    console_handler.setFormatter(colorlog.ColoredFormatter(
+        '%(log_color)s%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        log_colors={
+            'DEBUG': 'cyan', 'INFO': 'green', 'WARNING': 'yellow',
+            'ERROR': 'red', 'CRITICAL': 'red,bg_white',
+        }
+    ))
+    logger.addHandler(console_handler)
+
+    # File handler
+    file_handler = RotatingFileHandler(log_file, maxBytes=5*1024*1024, backupCount=5)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(message)s'))
+    logger.addHandler(file_handler)
+
+    # Suppress discord.py's built-in logging
+    for module in ['discord', 'discord.http', 'discord.gateway']:
+        logging.getLogger(module).setLevel(logging.WARNING)
+
+    return logger
+
+logger = setup_logging()
+
+# Cache Setup
+cache_dir = "cache"
+os.makedirs(cache_dir, exist_ok=True)
+perplexity_cache = Cache(cache_dir)
+
+# Bot Setup
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# Helper Functions
 @lru_cache(maxsize=1000)
 def get_cached_response(question):
     start_time = time.time()
     result = perplexity_cache.get(question.lower().strip())
     duration = time.time() - start_time
-    if result:
-        logger.debug(f"Cache hit for question: '{question[:50]}...' (retrieved in {duration:.3f}s)")
-    else:
-        logger.debug(f"Cache miss for question: '{question[:50]}...' (checked in {duration:.3f}s)")
+    logger.debug(f"Cache {'hit' if result else 'miss'} for question: '{question[:50]}...' (in {duration:.3f}s)")
     return result
 
 def cache_response(question, response):
     start_time = time.time()
     perplexity_cache.set(question.lower().strip(), response, expire=3600)
     duration = time.time() - start_time
-    logger.debug(f"Cached response for question: '{question[:50]}...' (stored in {duration:.3f}s)")
+    logger.debug(f"Cached response for question: '{question[:50]}...' (in {duration:.3f}s)")
 
 async def fetch_perplexity_response(question, retries=MAX_RETRIES):
-    logger.info(f"Fetching Perplexity response for question: '{question[:50]}...'")
-    url = PERPLEXITY_URL
+    logger.info(f"Fetching Perplexity response for: '{question[:50]}...'")
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
@@ -108,115 +104,94 @@ async def fetch_perplexity_response(question, retries=MAX_RETRIES):
         "frequency_penalty": 1
     }
     
-    try:
-        async with aiohttp.ClientSession() as session:
-            start_time = time.time()
-            async with session.post(url, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
-                duration = time.time() - start_time
-                logger.debug(f"Perplexity API request completed in {duration:.3f}s with status {response.status}")
-                
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.post(PERPLEXITY_URL, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
                 if response.status == 200:
                     result = await response.json()
                     answer = result['choices'][0]['message']['content']
-                    logger.info(f"Received successful response from Perplexity API (length: {len(answer)})")
+                    logger.info(f"Received successful response (length: {len(answer)})")
                     
-                    # Extract citations if available
+                    # Add citations and related questions if available
                     citations = result.get('citations', [])
                     if citations:
-                        formatted_citations = []
-                        for i, citation in enumerate(citations, 1):
-                            title = citation.get('title', 'Untitled')
-                            url = citation.get('url', '')
-                            formatted_citations.append(f"[{i}] {title}: {url}")
-                        
-                        answer += "\nSources:\n" + "\n".join(formatted_citations)
+                        answer += "\nSources:\n" + "\n".join(f"[{i+1}] {c.get('title', 'Untitled')}: {c.get('url', '')}" for i, c in enumerate(citations))
                     
-                    # Extract related questions if available
                     related_questions = result.get('related_questions', [])
                     if related_questions:
                         answer += "\nRelated Questions:\n" + "\n".join(f"• {q}" for q in related_questions[:3])
                     
                     return answer
                 elif response.status == 429 and retries > 0:
-                    logger.warning(f"Rate limited (status 429). Retrying in {RETRY_DELAY} seconds... (Attempts left: {retries-1})")
+                    logger.warning(f"Rate limited. Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
                     await asyncio.sleep(RETRY_DELAY)
                     return await fetch_perplexity_response(question, retries - 1)
                 elif 500 <= response.status < 600 and retries > 0:
-                    logger.warning(f"Server error (status {response.status}). Retrying in {RETRY_DELAY} seconds... (Attempts left: {retries-1})")
+                    logger.warning(f"Server error ({response.status}). Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
                     await asyncio.sleep(RETRY_DELAY)
                     return await fetch_perplexity_response(question, retries - 1)
                 else:
-                    logger.error(f"Perplexity API returned unexpected status code {response.status}")
-                    response_text = await response.text()
-                    logger.error(f"Response content: {response_text[:200]}...")
-    except aiohttp.ClientError as e:
-        logger.error(f"Network error when calling Perplexity API: {str(e)}")
-    except asyncio.TimeoutError:
-        logger.error(f"Request to Perplexity API timed out after {PERPLEXITY_TIMEOUT}s")
-    except Exception as e:
-        logger.error(f"Unexpected error calling Perplexity API: {str(e)}", exc_info=True)
+                    logger.error(f"Unexpected status code {response.status}")
+                    logger.error(f"Response content: {await response.text()[:200]}...")
+        except aiohttp.ClientError as e:
+            logger.error(f"Network error: {str(e)}")
+        except asyncio.TimeoutError:
+            logger.error(f"Request timed out after {PERPLEXITY_TIMEOUT}s")
+        except Exception as e:
+            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
     
     return None
 
 async def get_perplexity_response_with_retry(question):
-    logger.info(f"Attempting to get response for question: '{question[:50]}...'")
+    logger.info(f"Attempting to get response for: '{question[:50]}...'")
     start_time = time.time()
+    
     cached_response = get_cached_response(question)
     if cached_response:
-        logger.info("Using cached Perplexity response")
+        logger.info("Using cached response")
         return cached_response
     
-    logger.info("No cache hit, fetching new Perplexity response")
+    logger.info("No cache hit, fetching new response")
     response = await fetch_perplexity_response(question)
     
     if response:
         cache_response(question, response)
     else:
-        logger.warning("Failed to get a valid response from Perplexity API")
+        logger.warning("Failed to get a valid response")
     
-    duration = time.time() - start_time
-    logger.info(f"Total time to get response: {duration:.3f}s")
+    logger.info(f"Total time to get response: {time.time() - start_time:.3f}s")
     return response
 
 async def send_long_message(ctx, message):
     logger.info(f"Sending long message (length: {len(message)})")
-    max_length = 1900  # Reduced from 2000 to provide some buffer
+    max_length = 1900
 
     if len(message) <= max_length:
         await ctx.send(message)
-    else:
-        parts = []
-        while message:
-            if len(message) <= max_length:
-                parts.append(message)
-                break
-            
-            # Find the last sentence end within the max_length
-            last_period = message.rfind('.', 0, max_length)
-            last_question = message.rfind('?', 0, max_length)
-            last_exclamation = message.rfind('!', 0, max_length)
-            split_index = max(last_period, last_question, last_exclamation)
-            
-            if split_index == -1 or split_index == 0:
-                # If no sentence end found, split at the last space
-                split_index = message.rfind(' ', 0, max_length)
-                if split_index == -1:
-                    # If no space found, force split at max_length
-                    split_index = max_length
+        return
 
-            parts.append(message[:split_index+1].strip())
-            message = message[split_index+1:].strip()
+    parts = []
+    while message:
+        if len(message) <= max_length:
+            parts.append(message)
+            break
         
-        logger.debug(f"Message split into {len(parts)} parts")
-        for part in parts:
-            await ctx.send(part)
+        split_index = max(message.rfind(c, 0, max_length) for c in '.?!')
+        if split_index <= 0:
+            split_index = message.rfind(' ', 0, max_length)
+        if split_index <= 0:
+            split_index = max_length
+
+        parts.append(message[:split_index+1].strip())
+        message = message[split_index+1:].strip()
+    
+    logger.debug(f"Message split into {len(parts)} parts")
+    for part in parts:
+        await ctx.send(part)
     
     logger.debug("Long message sent successfully")
 
-# Add this near the top of your file, after imports
-user_locks = {}
-
-# Bot commands
+# Bot Commands
 @bot.event
 async def on_ready():
     logger.info(f'{bot.user} has connected to Discord!')
@@ -225,75 +200,57 @@ async def on_ready():
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def defi(ctx, *, question=None):
-    # Remove cooldown for the specified user
     if ctx.author.id == 804823236222779413:
         ctx.command.reset_cooldown(ctx)
 
-    logger.info(f"Received defi command from user {ctx.author} (ID: {ctx.author.id})")
+    logger.info(f"Received defi command from {ctx.author} (ID: {ctx.author.id})")
     
-    if question is None:
-        logger.warning(f"No question provided by user {ctx.author} (ID: {ctx.author.id})")
-        await ctx.send("Please provide a question after the !defi command. For example: `!defi What is yield farming?`")
+    if not question:
+        await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
         return
 
     logger.info(f"Question: {question}")
     
-    # Use a lock to prevent duplicate processing
-    if ctx.author.id not in user_locks:
-        user_locks[ctx.author.id] = asyncio.Lock()
+    if len(question) < 5:
+        await ctx.send("Please provide a more detailed question (at least 5 characters).")
+        return
+    if len(question) > 500:
+        await ctx.send("Your question is too long. Please limit it to 500 characters.")
+        return
     
-    async with user_locks[ctx.author.id]:
-        if len(question) < 5:
-            logger.warning(f"Rejected short question from user {ctx.author} (ID: {ctx.author.id})")
-            await ctx.send("Please provide a more detailed question (at least 5 characters).")
-            return
-        if len(question) > 500:
-            logger.warning(f"Rejected long question from user {ctx.author} (ID: {ctx.author.id})")
-            await ctx.send("Your question is too long. Please limit it to 500 characters.")
-            return
-        
-        async with ctx.typing():
-            start_time = time.time()
-            try:
-                response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
-                
-                if response:
-                    logger.info(f"Sending response to user {ctx.author} (ID: {ctx.author.id})")
-                    await send_long_message(ctx, response)
-                else:
-                    logger.warning(f"No response generated for user {ctx.author} (ID: {ctx.author.id})")
-                    await ctx.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
-            except aiohttp.ClientError as e:
-                logger.error(f"Network error for user {ctx.author} (ID: {ctx.author.id}): {str(e)}")
-                await ctx.send("I'm having trouble connecting to the AI service. Please try again later.")
-            except Exception as e:
-                logger.error(f"Unexpected error in defi command for user {ctx.author} (ID: {ctx.author.id})", exc_info=True)
-                await ctx.send("An unexpected error occurred. Our team has been notified.")
-            finally:
-                duration = time.time() - start_time
-                logger.info(f"Total command processing time: {duration:.3f}s")
+    async with ctx.typing():
+        try:
+            response = await get_perplexity_response_with_retry(f"DeFi question: {question}")
+            
+            if response:
+                logger.info(f"Sending response to {ctx.author} (ID: {ctx.author.id})")
+                await send_long_message(ctx, response)
+            else:
+                logger.warning(f"No response generated for {ctx.author} (ID: {ctx.author.id})")
+                await ctx.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
+        except Exception as e:
+            logger.error(f"Error in defi command for {ctx.author} (ID: {ctx.author.id})", exc_info=True)
+            await ctx.send("An unexpected error occurred. Our team has been notified.")
 
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
-        # Skip cooldown message for the specified user
         if ctx.author.id != 804823236222779413:
-            logger.info(f"Cooldown triggered for user {ctx.author} (ID: {ctx.author.id})")
+            logger.info(f"Cooldown triggered for {ctx.author} (ID: {ctx.author.id})")
             await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
     elif isinstance(error, commands.CommandInvokeError):
-        logger.error(f"Command invoke error for user {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
+        logger.error(f"Command invoke error for {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
         await ctx.send("An error occurred while processing your command. Please try again.")
     else:
-        logger.error(f"Unhandled error for user {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
+        logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-# Add this function to create a simple web server
+# Web Server
 async def create_web_server():
     app = web.Application()
     app.router.add_get('/', lambda request: web.Response(text="Bot is running!"))
     return app
 
-# Modify your start_bot function
 async def start_bot():
     try:
         web_app = await create_web_server()
@@ -313,7 +270,6 @@ async def start_bot():
         await runner.cleanup()
         logger.info("Bot has been shut down.")
 
-# Update the main function
 if __name__ == "__main__":
     try:
         asyncio.run(start_bot())
