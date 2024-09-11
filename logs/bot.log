@@ -456,3 +456,165 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-11 03:02:30,602 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
 2024-09-11 03:02:30,602 [INFO] Sending long message (length: 2605)
 2024-09-11 03:02:31,188 [INFO] Total command processing time: 19.663s
+2024-09-11 03:31:22,558 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:31:25,892 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:31:25,893 [INFO] Bot is active in 1 guilds
+2024-09-11 03:31:48,419 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:32:21,332 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:32:21,334 [INFO] Question: arbitrum
+2024-09-11 03:32:21,820 [INFO] Attempting to get response for question: 'DeFi question: arbitrum...'
+2024-09-11 03:32:21,821 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 03:32:21,821 [INFO] Fetching Perplexity response for question: 'DeFi question: arbitrum...'
+2024-09-11 03:32:35,705 [INFO] Received successful response from Perplexity API (length: 3108)
+2024-09-11 03:32:35,709 [INFO] Total time to get response: 13.889s
+2024-09-11 03:32:35,710 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:32:35,710 [INFO] Sending long message (length: 3108)
+2024-09-11 03:32:36,380 [INFO] Total command processing time: 14.560s
+2024-09-11 03:32:59,980 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:33:03,112 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:33:03,113 [INFO] Bot is active in 1 guilds
+2024-09-11 03:33:07,946 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:33:07,948 [INFO] Question: dogecoin
+2024-09-11 03:33:08,203 [INFO] Attempting to get response for question: 'DeFi question: dogecoin...'
+2024-09-11 03:33:08,205 [INFO] Using cached Perplexity response
+2024-09-11 03:33:08,205 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:33:08,205 [INFO] Sending long message (length: 2605)
+2024-09-11 03:33:08,891 [INFO] Total command processing time: 0.688s
+2024-09-11 03:33:18,108 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:33:18,110 [INFO] Question: solana tvl
+2024-09-11 03:33:18,325 [INFO] Attempting to get response for question: 'DeFi question: solana tvl...'
+2024-09-11 03:33:18,326 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 03:33:18,327 [INFO] Fetching Perplexity response for question: 'DeFi question: solana tvl...'
+2024-09-11 03:33:28,890 [INFO] Received successful response from Perplexity API (length: 1934)
+2024-09-11 03:33:28,894 [INFO] Total time to get response: 10.569s
+2024-09-11 03:33:28,895 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:33:28,895 [INFO] Sending long message (length: 1934)
+2024-09-11 03:33:29,423 [INFO] Total command processing time: 11.098s
+2024-09-11 03:33:42,760 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:33:57,052 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:33:57,307 [INFO] Keep-alive request sent. Status: 502
+2024-09-11 03:34:00,176 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:34:00,176 [INFO] Bot is active in 1 guilds
+2024-09-11 03:34:01,254 [INFO] User fortunexbt (ID: 804823236222779413) used !defi without a question
+2024-09-11 03:34:01,509 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:34:35,610 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:34:35,769 [INFO] Keep-alive request sent. Status: 502
+2024-09-11 03:34:38,628 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:34:38,628 [INFO] Bot is active in 1 guilds
+2024-09-11 03:34:40,062 [INFO] User fortunexbt (ID: 804823236222779413) used !defi without a question
+2024-09-11 03:34:40,315 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:34:42,522 [INFO] Cooldown triggered for user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:34:42,783 [INFO] Cooldown triggered for user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:34:57,878 [INFO] User fortunexbt (ID: 804823236222779413) used !defi without a question
+2024-09-11 03:34:58,184 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:36:06,378 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:36:06,623 [INFO] Keep-alive request sent. Status: 502
+2024-09-11 03:36:16,361 [INFO] User fortunexbt (ID: 804823236222779413) used !defi without a question
+2024-09-11 03:36:21,864 [INFO] Received defi command from user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:36:21,866 [INFO] Question: potato
+2024-09-11 03:36:22,111 [INFO] Attempting to get response for question: 'DeFi question: potato...'
+2024-09-11 03:36:22,112 [INFO] No cache hit, fetching new Perplexity response
+2024-09-11 03:36:22,113 [INFO] Fetching Perplexity response for question: 'DeFi question: potato...'
+2024-09-11 03:36:30,591 [INFO] Received successful response from Perplexity API (length: 1911)
+2024-09-11 03:36:30,594 [INFO] Total time to get response: 8.483s
+2024-09-11 03:36:30,595 [INFO] Sending response to user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:36:30,595 [INFO] Sending long message (length: 1911)
+2024-09-11 03:36:31,178 [INFO] Total command processing time: 9.067s
+2024-09-11 03:38:27,635 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:38:28,480 [INFO] Keep-alive request sent. Status: 502
+2024-09-11 03:38:30,819 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:38:30,819 [INFO] Bot is active in 1 guilds
+2024-09-11 03:38:31,969 [ERROR] Ignoring exception in command None
+discord.ext.commands.errors.CommandNotFound: Command "defi" is not found
+2024-09-11 03:38:35,659 [ERROR] Ignoring exception in command None
+discord.ext.commands.errors.CommandNotFound: Command "defi" is not found
+2024-09-11 03:40:10,287 [INFO] Shutdown signal received. Cleaning up...
+2024-09-11 03:40:11,195 [INFO] Shutdown signal received. Cleaning up...
+2024-09-11 03:40:28,855 [INFO] Shutdown signal received. Cleaning up...
+2024-09-11 03:40:32,152 [INFO] Bot has shut down.
+2024-09-11 03:42:35,218 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:42:38,623 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:42:38,623 [INFO] Bot is active in 1 guilds
+2024-09-11 03:42:41,460 [ERROR] Unhandled error for user fortunexbt (ID: 804823236222779413)
+Traceback (most recent call last):
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/bot.py", line 1366, in invoke
+    await ctx.command.invoke(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 1021, in invoke
+    await self.prepare(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 938, in prepare
+    await self._parse_arguments(ctx)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 853, in _parse_arguments
+    kwargs[name] = await self.transform(ctx, param, attachments)
+  File "/Users/fortune/Code/mybot_env/lib/python3.9/site-packages/discord/ext/commands/core.py", line 697, in transform
+    raise MissingRequiredArgument(param)
+discord.ext.commands.errors.MissingRequiredArgument: question is a required argument that is missing.
+2024-09-11 03:43:38,081 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:43:41,163 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:43:41,164 [INFO] Bot is active in 1 guilds
+2024-09-11 03:43:50,135 [INFO] Missing required argument for user fortunexbt (ID: 804823236222779413). Command: defi
+2024-09-11 03:44:29,766 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:44:32,959 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:44:32,960 [INFO] Bot is active in 1 guilds
+2024-09-11 03:44:34,674 [INFO] Bot has been shut down.
+2024-09-11 03:44:34,676 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 03:44:34,676 [INFO] Bot script has ended.
