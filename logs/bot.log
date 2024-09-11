@@ -659,3 +659,18 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-11 05:03:19,219 [INFO] Bot has been shut down.
 2024-09-11 05:03:19,221 [INFO] Received keyboard interrupt. Exiting...
 2024-09-11 05:03:19,221 [INFO] Bot script has ended.
+2024-09-11 05:32:27,715 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 05:32:31,076 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 05:32:31,093 [INFO] Bot is active in 1 guilds
+2024-09-11 05:32:39,936 [INFO] Received defi command from fortunexbt (ID: 804823236222779413)
+2024-09-11 05:32:39,940 [INFO] Question: mad meerkat finance
+2024-09-11 05:32:40,138 [INFO] Attempting to get response for: 'DeFi question: mad meerkat finance...'
+2024-09-11 05:32:40,140 [INFO] No cache hit, fetching new response
+2024-09-11 05:32:40,140 [INFO] Fetching Perplexity response for: 'DeFi question: mad meerkat finance...'
+2024-09-11 05:32:48,996 [INFO] Received successful response (length: 1656)
+2024-09-11 05:32:49,000 [INFO] Total time to get response: 8.861s
+2024-09-11 05:32:49,000 [INFO] Sending response to fortunexbt (ID: 804823236222779413)
+2024-09-11 05:32:49,000 [INFO] Sending long message (length: 1656)
+2024-09-11 05:33:30,466 [INFO] Bot has been shut down.
+2024-09-11 05:33:30,468 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 05:33:30,469 [INFO] Bot script has ended.
