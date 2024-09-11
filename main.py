@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 from diskcache import Cache
 from functools import lru_cache
 import time
+from aiohttp import web
 
 # Move this block to the top of the file, right after imports
 log_directory = "logs"
@@ -275,31 +276,33 @@ async def on_command_error(ctx, error):
         logger.error(f"Unhandled error for user {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-# Add this function to send a request to your bot's URL
-async def keep_alive():
-    url = "https://securepath-bot.onrender.com"  # Replace with your actual bot URL
-    async with aiohttp.ClientSession() as session:
-        while True:
-            try:
-                async with session.get(url) as response:
-                    print(f"Keep-alive request sent. Status: {response.status}")
-            except Exception as e:
-                print(f"Error sending keep-alive request: {e}")
-            await asyncio.sleep(600)  # Wait for 10 minutes before the next request
+# Add this function to create a simple web server
+async def create_web_server():
+    app = web.Application()
+    app.router.add_get('/', lambda request: web.Response(text="Bot is running!"))
+    return app
 
-# Modify your bot.run() call to include the keep_alive coroutine
+# Modify your start_bot function
 async def start_bot():
     try:
+        web_app = await create_web_server()
+        runner = web.AppRunner(web_app)
+        await runner.setup()
+        port = int(os.environ.get('PORT', 10000))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        
         await asyncio.gather(
-            bot.start(DISCORD_TOKEN),
-            keep_alive()
+            site.start(),
+            bot.start(DISCORD_TOKEN)
         )
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
     finally:
         await bot.close()
+        await runner.cleanup()
         logger.info("Bot has been shut down.")
 
+# Update the main function
 if __name__ == "__main__":
     try:
         asyncio.run(start_bot())

@@ -618,3 +618,18 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-11 03:44:34,674 [INFO] Bot has been shut down.
 2024-09-11 03:44:34,676 [INFO] Received keyboard interrupt. Exiting...
 2024-09-11 03:44:34,676 [INFO] Bot script has ended.
+2024-09-11 03:52:43,931 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:52:47,146 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:52:47,146 [INFO] Bot is active in 1 guilds
+2024-09-11 03:53:27,994 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 03:53:27,996 [INFO] Bot script has ended.
+2024-09-11 03:53:28,716 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 03:53:32,143 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 03:53:32,144 [INFO] Bot is active in 1 guilds
+2024-09-11 03:53:33,453 [INFO] Missing required argument for user fortunexbt (ID: 804823236222779413). Command: defi
+2024-09-11 03:53:35,595 [INFO] Cooldown triggered for user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:53:43,010 [INFO] Cooldown triggered for user fortunexbt (ID: 804823236222779413)
+2024-09-11 03:53:45,217 [INFO] Missing required argument for user fortunexbt (ID: 804823236222779413). Command: defi
+2024-09-11 03:53:49,319 [INFO] Bot has been shut down.
+2024-09-11 03:53:49,321 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 03:53:49,321 [INFO] Bot script has ended.
