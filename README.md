@@ -14,8 +14,7 @@ SecurePath AI is an advanced Discord bot designed to provide expert insights and
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/securepath-ai.git
-   cd securepath-ai
+   git clone https://github.com/fortunexbt/securepath
    ```
 
 2. Install dependencies:
