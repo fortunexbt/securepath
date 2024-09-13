@@ -48,7 +48,12 @@ Example:
 
 ## DM Functionality
 
-The bot also responds to direct messages, providing a more personalized experience.
+The bot also responds to direct messages, providing a more personalized experience. There is no need to use the prefix in DMs.
+
+Example:
+```
+What's the current state of Uniswap's liquidity?
+```
 
 ## Contributing
 
