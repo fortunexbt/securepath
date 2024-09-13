@@ -674,3 +674,72 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-11 05:33:30,466 [INFO] Bot has been shut down.
 2024-09-11 05:33:30,468 [INFO] Received keyboard interrupt. Exiting...
 2024-09-11 05:33:30,469 [INFO] Bot script has ended.
+2024-09-11 20:40:13,032 [WARNING] PyNaCl is not installed, voice will NOT be supported
+2024-09-11 20:40:16,329 [INFO] SecurePath AI Agent#6382 has connected to Discord!
+2024-09-11 20:40:16,330 [INFO] Bot is active in 1 guilds
+2024-09-11 20:41:05,128 [INFO] Received defi command from fortunexbt (ID: 804823236222779413)
+2024-09-11 20:41:24,505 [INFO] Received defi command from fortunexbt (ID: 804823236222779413)
+2024-09-11 20:41:24,506 [INFO] Question: what is arbitrum
+2024-09-11 20:41:24,942 [INFO] Attempting to get response for: 'DeFi question: what is arbitrum...'
+2024-09-11 20:41:24,944 [INFO] No cache hit, fetching new response
+2024-09-11 20:41:24,944 [INFO] Fetching Perplexity response for: 'DeFi question: what is arbitrum...'
+2024-09-11 20:41:32,914 [INFO] Received successful response (length: 2209)
+2024-09-11 20:41:32,920 [INFO] Total time to get response: 7.977s
+2024-09-11 20:41:32,920 [INFO] Sending response to fortunexbt (ID: 804823236222779413)
+2024-09-11 20:41:32,920 [INFO] Sending long message (length: 2209)
+2024-09-11 20:42:23,816 [INFO] Bot has been shut down.
+2024-09-11 20:42:23,817 [INFO] Received keyboard interrupt. Exiting...
+2024-09-11 20:42:23,817 [INFO] Bot script has ended.
+2024-09-13 14:43:48,194 [WARNING] discord.client:300 - PyNaCl is not installed, voice will NOT be supported
+2024-09-13 14:43:48,195 [DEBUG] asyncio:59 - Using selector: KqueueSelector
+2024-09-13 14:43:52,113 [INFO] root:289 - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-13 14:43:52,113 [INFO] root:290 - Bot is active in 1 guilds
+2024-09-13 14:43:52,114 [INFO] root:291 - Bot is ready to receive DMs
+2024-09-13 14:44:59,457 [INFO] root:320 - Received defi command from fortunexbt (ID: 804823236222779413) in DM
+2024-09-13 14:44:59,460 [INFO] root:326 - Question: what is yield farming?
+2024-09-13 14:44:59,732 [INFO] root:168 - Attempting to get response for user 804823236222779413: 'DeFi question: what is yield farming?...'
+2024-09-13 14:44:59,736 [DEBUG] root:83 - Cache miss for question: '[{'role': 'user', 'content': 'DeFi question: what ...' (in 0.003s)
+2024-09-13 14:44:59,736 [INFO] root:186 - No cache hit, fetching new response for user 804823236222779413
+2024-09-13 14:44:59,736 [INFO] root:202 - Fetching Perplexity response for context: 'DeFi question: what is yield farming?...'
+2024-09-13 14:45:06,614 [INFO] root:225 - Received successful response (length: 2063)
+2024-09-13 14:45:06,623 [DEBUG] root:90 - Cached response for question: '[{'role': 'user', 'content': 'DeFi question: what ...' (in 0.004s)
+2024-09-13 14:45:06,623 [DEBUG] root:192 - Response cached for user 804823236222779413
+2024-09-13 14:45:06,623 [INFO] root:197 - Total time to get response for user 804823236222779413: 6.891s
+2024-09-13 14:45:06,624 [INFO] root:340 - Sending response to fortunexbt (ID: 804823236222779413)
+2024-09-13 14:45:06,624 [INFO] root:258 - Sending long message (length: 2063)
+2024-09-13 14:45:06,624 [DEBUG] root:280 - Message split into 2 parts
+2024-09-13 14:45:07,375 [DEBUG] root:284 - Long message sent successfully
+2024-09-13 14:48:49,732 [INFO] root:400 - Bot has been shut down.
+2024-09-13 14:48:49,735 [INFO] root:406 - Received keyboard interrupt. Exiting...
+2024-09-13 14:48:49,736 [INFO] root:410 - Bot script has ended.
+2024-09-13 14:48:50,872 [WARNING] discord.client:300 - PyNaCl is not installed, voice will NOT be supported
+2024-09-13 14:48:50,873 [DEBUG] asyncio:59 - Using selector: KqueueSelector
+2024-09-13 14:48:54,503 [INFO] root:289 - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-13 14:48:54,504 [INFO] root:290 - Bot is active in 1 guilds
+2024-09-13 14:48:54,504 [INFO] root:291 - Bot is ready to receive DMs
+2024-09-13 14:49:03,657 [INFO] root:168 - Attempting to get response for user 804823236222779413: 'DeFi question: hey how are you...'
+2024-09-13 14:49:03,660 [DEBUG] root:83 - Cache miss for question: '[{'role': 'user', 'content': 'DeFi question: hey h...' (in 0.001s)
+2024-09-13 14:49:03,660 [INFO] root:186 - No cache hit, fetching new response for user 804823236222779413
+2024-09-13 14:49:03,661 [INFO] root:202 - Fetching Perplexity response for context: 'DeFi question: hey how are you...'
+2024-09-13 14:49:06,853 [INFO] root:225 - Received successful response (length: 580)
+2024-09-13 14:49:06,859 [DEBUG] root:90 - Cached response for question: '[{'role': 'user', 'content': 'DeFi question: hey h...' (in 0.004s)
+2024-09-13 14:49:06,860 [DEBUG] root:192 - Response cached for user 804823236222779413
+2024-09-13 14:49:06,860 [INFO] root:197 - Total time to get response for user 804823236222779413: 3.201s
+2024-09-13 14:49:06,860 [INFO] root:324 - Sending DM response to fortunexbt (ID: 804823236222779413)
+2024-09-13 14:49:06,861 [INFO] root:258 - Sending long message (length: 580)
+2024-09-13 14:49:21,480 [INFO] root:168 - Attempting to get response for user 804823236222779413: 'DeFi question: What's your favorite LP right now?...'
+2024-09-13 14:49:21,484 [DEBUG] root:83 - Cache miss for question: '[{'role': 'user', 'content': 'DeFi question: hey h...' (in 0.001s)
+2024-09-13 14:49:21,484 [INFO] root:186 - No cache hit, fetching new response for user 804823236222779413
+2024-09-13 14:49:21,484 [INFO] root:202 - Fetching Perplexity response for context: 'DeFi question: What's your favorite LP right now?...'
+2024-09-13 14:49:28,828 [INFO] root:225 - Received successful response (length: 2239)
+2024-09-13 14:49:28,830 [DEBUG] root:90 - Cached response for question: '[{'role': 'user', 'content': 'DeFi question: hey h...' (in 0.001s)
+2024-09-13 14:49:28,830 [DEBUG] root:192 - Response cached for user 804823236222779413
+2024-09-13 14:49:28,830 [INFO] root:197 - Total time to get response for user 804823236222779413: 7.347s
+2024-09-13 14:49:28,831 [INFO] root:324 - Sending DM response to fortunexbt (ID: 804823236222779413)
+2024-09-13 14:49:28,831 [INFO] root:258 - Sending long message (length: 2239)
+2024-09-13 14:49:28,831 [DEBUG] root:280 - Message split into 2 parts
+2024-09-13 14:49:29,442 [DEBUG] root:284 - Long message sent successfully
+2024-09-13 14:49:59,411 [INFO] root:339 - Received defi command from fortunexbt (ID: 804823236222779413) in DM
+2024-09-13 14:50:03,823 [INFO] root:419 - Bot has been shut down.
+2024-09-13 14:50:03,823 [INFO] root:425 - Received keyboard interrupt. Exiting...
+2024-09-13 14:50:03,823 [INFO] root:429 - Bot script has ended.
