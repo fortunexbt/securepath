@@ -743,3 +743,13 @@ discord.ext.commands.errors.MissingRequiredArgument: question is a required argu
 2024-09-13 14:50:03,823 [INFO] root:419 - Bot has been shut down.
 2024-09-13 14:50:03,823 [INFO] root:425 - Received keyboard interrupt. Exiting...
 2024-09-13 14:50:03,823 [INFO] root:429 - Bot script has ended.
+2024-09-13 15:14:47,515 [WARNING] discord.client:300 - PyNaCl is not installed, voice will NOT be supported
+2024-09-13 15:14:47,515 [DEBUG] asyncio:59 - Using selector: KqueueSelector
+2024-09-13 15:14:50,816 [INFO] root:289 - SecurePath AI Agent#6382 has connected to Discord!
+2024-09-13 15:14:50,817 [INFO] root:290 - Bot is active in 1 guilds
+2024-09-13 15:14:50,817 [INFO] root:291 - Bot is ready to receive DMs
+2024-09-13 15:15:23,576 [INFO] root:347 - Received defi command from fortunexbt (ID: 804823236222779413) in server
+2024-09-13 15:15:23,578 [INFO] root:353 - Question: hi
+2024-09-13 15:17:56,197 [INFO] root:427 - Bot has been shut down.
+2024-09-13 15:17:56,199 [INFO] root:433 - Received keyboard interrupt. Exiting...
+2024-09-13 15:17:56,199 [INFO] root:437 - Bot script has ended.
