@@ -5,6 +5,7 @@ from logging.handlers import RotatingFileHandler
 import time
 from functools import lru_cache
 import base64
+from asyncio import Lock
 
 import aiohttp
 from aiohttp import web
@@ -16,6 +17,7 @@ from dotenv import load_dotenv
 from aiohttp_session import setup as setup_session
 from aiohttp_session.cookie_storage import EncryptedCookieStorage
 from cryptography import fernet
+from discord.errors import HTTPException, Forbidden
 
 # Constants and Environment Setup
 load_dotenv()
@@ -88,6 +90,12 @@ def cache_response(question, response):
     perplexity_cache.set(question.lower().strip(), response, expire=3600)
     duration = time.time() - start_time
     logger.debug(f"Cached response for question: '{question[:50]}...' (in {duration:.3f}s)")
+
+# Add a lock for API calls
+api_lock = Lock()
+
+# Add a message tracking set
+sent_messages = set()
 
 async def fetch_perplexity_response(question, retries=MAX_RETRIES):
     logger.info(f"Fetching Perplexity response for: '{question[:50]}...'")
@@ -184,7 +192,8 @@ async def get_perplexity_response_with_retry(question, user_id):
         return cached_response
     
     logger.info(f"No cache hit, fetching new response for user {user_id}")
-    response = await fetch_perplexity_response(context['messages'])
+    async with api_lock:  # Ensure only one API call at a time
+        response = await fetch_perplexity_response(context['messages'])
     
     if response:
         context['messages'].append({"role": "assistant", "content": response})
@@ -258,8 +267,20 @@ async def send_long_message(ctx, message):
     logger.info(f"Sending long message (length: {len(message)})")
     max_length = 1900
 
+    # Generate a unique identifier for this message
+    message_id = hash(message + str(time.time()))
+    if message_id in sent_messages:
+        logger.warning(f"Duplicate message detected. Skipping send.")
+        return
+
+    sent_messages.add(message_id)
+
     if len(message) <= max_length:
-        await ctx.send(message)
+        try:
+            await ctx.send(message)
+            logger.debug("Short message sent successfully")
+        except (HTTPException, Forbidden) as e:
+            logger.error(f"Failed to send message: {str(e)}")
         return
 
     parts = []
@@ -279,9 +300,21 @@ async def send_long_message(ctx, message):
     
     logger.debug(f"Message split into {len(parts)} parts")
     for part in parts:
-        await ctx.send(part)
+        try:
+            await ctx.send(part)
+            await asyncio.sleep(1)  # Add a small delay between messages
+        except (HTTPException, Forbidden) as e:
+            logger.error(f"Failed to send message part: {str(e)}")
+            break
     
     logger.debug("Long message sent successfully")
+
+    # Remove the message ID after a delay to allow for potential retries
+    asyncio.create_task(remove_sent_message(message_id))
+
+async def remove_sent_message(message_id):
+    await asyncio.sleep(60)  # Wait for 60 seconds
+    sent_messages.discard(message_id)
 
 # Bot Commands
 @bot.event
@@ -300,40 +333,54 @@ async def on_message(message):
     if isinstance(message.channel, discord.DMChannel):
         await process_dm(message)
     else:
-        await bot.process_commands(message)
+        try:
+            await bot.process_commands(message)
+        except Exception as e:
+            logger.error(f"Error processing command: {str(e)}", exc_info=True)
 
 async def process_dm(message):
+    logger.info(f"Received DM from {message.author} (ID: {message.author.id})")
+    question = message.content.strip()
+    logger.debug(f"DM content: '{question[:50]}...'")
+    
     if message.author.id not in welcomed_users:
-        welcome_message = ("Welcome! You can ask me any DeFi-related questions directly. "
-                           "Just type your question, and I'll do my best to answer. "
-                           "If you want to use specific commands, start your message with '!'.")
-        await message.channel.send(welcome_message)
-        welcomed_users.add(message.author.id)
-
-    if message.content.startswith('!'):
-        await bot.process_commands(message)
-    else:
-        question = message.content.strip()
         if len(question) < 5:
-            await message.channel.send("Please provide a more detailed question (at least 5 characters).")
+            logger.info(f"Sending welcome message to new user {message.author} (ID: {message.author.id})")
+            welcome_message = ("Welcome to SecurePath AI! I'm here to answer your DeFi-related questions. "
+                               "Feel free to ask anything about DeFi, crypto, or blockchain technology. "
+                               "What would you like to know?")
+            await message.channel.send(welcome_message)
+            welcomed_users.add(message.author.id)
             return
-        if len(question) > 500:
-            await message.channel.send("Your question is too long. Please limit it to 500 characters.")
-            return
+        else:
+            logger.info(f"New user {message.author} (ID: {message.author.id}) sent a valid first message")
+            welcomed_users.add(message.author.id)
+    
+    if len(question) < 5:
+        logger.info(f"Short message received from {message.author} (ID: {message.author.id})")
+        await message.channel.send("Your message was a bit short. Could you please provide more details or ask a specific question about DeFi?")
+        return
+    
+    if len(question) > 500:
+        logger.info(f"Long message received from {message.author} (ID: {message.author.id})")
+        await message.channel.send("That's quite a long message! Could you please shorten it to 500 characters or less? This helps me provide more focused answers.")
+        return
 
-        async with message.channel.typing():
-            try:
-                response = await get_perplexity_response_with_retry(f"DeFi question: {question}", message.author.id)
-                
-                if response:
-                    logger.info(f"Sending DM response to {message.author} (ID: {message.author.id})")
-                    await send_long_message(message.channel, response)
-                else:
-                    logger.warning(f"No response generated for DM from {message.author} (ID: {message.author.id})")
-                    await message.channel.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
-            except Exception as e:
-                logger.error(f"Error processing DM for {message.author} (ID: {message.author.id})", exc_info=True)
-                await message.channel.send("An unexpected error occurred. Our team has been notified.")
+    logger.info(f"Processing valid DM question from {message.author} (ID: {message.author.id})")
+    async with message.channel.typing():
+        try:
+            logger.debug(f"Fetching response for DM question: '{question[:50]}...'")
+            response = await get_perplexity_response_with_retry(f"DeFi question: {question}", message.author.id)
+            
+            if response:
+                logger.info(f"Sending DM response to {message.author} (ID: {message.author.id})")
+                await send_long_message(message.channel, response)
+            else:
+                logger.warning(f"No response generated for DM from {message.author} (ID: {message.author.id})")
+                await message.channel.send("I'm sorry, I couldn't generate a response to that. Could you try rephrasing your question?")
+        except Exception as e:
+            logger.error(f"Error processing DM for {message.author} (ID: {message.author.id})", exc_info=True)
+            await message.channel.send("Oops! Something went wrong on my end. Please try asking your question again in a moment.")
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -429,6 +476,15 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Exiting...")
     except Exception as e:
-        logger.error(f"Unexpected error occurred: {type(e).__name__}: {str(e)}")
+        logger.critical(f"Critical error occurred: {type(e).__name__}: {str(e)}", exc_info=True)
     finally:
         logger.info("Bot script has ended.")
+        # Ensure all log messages are written
+        for handler in logger.handlers:
+            handler.close()
+            logger.removeHandler(handler)
+        # Clear any remaining tasks
+        pending = asyncio.all_tasks()
+        for task in pending:
+            task.cancel()
+        asyncio.get_event_loop().run_until_complete(asyncio.gather(*pending, return_exceptions=True))
