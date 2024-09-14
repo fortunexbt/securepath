@@ -1,14 +1,13 @@
-# IGNORE
+# Ignore everything
+*
+!.gitignore
+!README.md
+!main.py
+!requirements.txt
+!*/
+venv/
 .env
 .env.*
-**/backup/
-**/cache/
-**/logs/
 *.bot.log
-logs/
-perplexity_cache/
-node_modules/
 *.pyc
-__pycache__/
 .DS_Store
-**/mybot_env/

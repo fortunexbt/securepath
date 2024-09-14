@@ -1,0 +1,404 @@
+# -*- coding: utf-8 -*- #
+"""This provides the DeFi Llama class implementation which acts as
+DeFi Llama's API client."""
+
+import requests
+
+# --------- Constants --------- #
+
+BASE_URL = "https://api.llama.fi"
+
+
+# --------- Constants --------- #
+
+
+class DefiLlama:
+    """
+    DeFi Llama class to act as DeFi Llama's API client.
+    All the requests can be made through this class.
+    """
+
+    def __init__(self):
+        """
+        Initialize the object
+        """
+        self.session = requests.Session()
+
+    def _send_message(self, method, endpoint, params=None, data=None, full_url=False):
+        """
+        Send API request.
+        :param method: HTTP method (get, post, delete, etc.)
+        :param endpoint: Endpoint (to be added to base URL)
+        :param params: HTTP request parameters
+        :param data: JSON-encoded string payload for POST
+        :return: dict/list: JSON response
+        """
+        url = BASE_URL + endpoint
+        if full_url:
+            url = endpoint
+        response = self.session.request(method, url, params=params,
+                                        json=data, timeout=30)
+        return response.json()
+
+    def _get(self, endpoint, params=None, full_url=False):
+        """
+        Get API request
+        :param endpoint: Endpoint (to be added to base URL)
+        :param params: HTTP request parameters
+        :return:
+        """
+        return self._send_message('GET', endpoint, params=params, full_url=full_url)
+
+    def get_all_protocols(self):
+        """
+        Returns basic information on all listed protocols, their current
+        TVL and the changes to it in the last hour/day/week.
+        Endpoint: GET /protocols
+
+        :return: JSON response
+        """
+        path = '/protocols'
+
+        return self._get(path)
+
+    def get_protocol(self, name):
+        """
+        Returns historical data on the TVL of a protocol along with some basic data on it.
+        The fields `tokensInUsd` and `tokens` are only available for some protocols..
+        Endpoint: GET /protocol/{name}
+
+        :param: name : ID of the protocol to get (eg: uniswap, WBTC...).
+            This can be obtained from the /protocols endpoint
+        :return: JSON response
+        """
+        path = f'/protocol/{name}'
+
+        return self._get(path)
+
+    def get_historical_tvl(self):
+        """
+        Get Historical TVL of DeFi on all chains
+
+        :return: JSON response
+        """
+        path = '/v2/historicalChainTvl'
+
+        return self._get(path)
+
+    def get_historical_tvl_chain(self, chain):
+        """
+        Get Historical TVL of a chain
+
+        :return: JSON response
+        """
+        path = f'/v2/historicalChainTvl/{chain}'
+
+        return self._get(path)
+
+    def get_protocol_current_tvl(self, protocol):
+        """
+        Simplified endpoint that only returns a number, the current TVL of a protocol
+
+        :param: name : ID of the protocol to get (eg: uniswap, WBTC...).
+            This can be obtained from the /protocols endpoint
+        :return: JSON response
+        """
+        path = f'/tvl/{protocol}'
+
+        return self._get(path)
+
+    def get_chains_current_tvl(self):
+        """
+        Returns list of current TVL of all chains.
+
+        :return: JSON response
+        """
+        path = f'/v2/chains'
+
+        return self._get(path)
+
+    # ##### Coins EPs ###### #
+    def get_token_current_prices(self, coins: str, searchWidth: str = '4h'):
+        """
+        Get current prices of tokens by contract address
+        """
+        path = f'/prices/current/{coins}'
+        params = {
+            'searchWidth': searchWidth
+        }
+
+        return self._get(path, params=params)
+
+    def get_token_historical_prices(self, coins: str, timestamp: int, searchWidth: str = '4h'):
+        """
+        Get historical prices of tokens by contract address
+        """
+        path = f'/prices/historical/{timestamp}/{coins}'
+        params = {
+            'searchWidth': searchWidth
+        }
+
+        return self._get(path, params=params)
+
+    def get_batch_historical_prices(self, coins: str, searchWidth: str = '600'):
+        """
+        Get historical prices of tokens by contract address
+        """
+        path = f'https://coins.llama.fi/batchHistorical'
+        params = {
+            'coins': coins,
+            'searchWidth': searchWidth
+        }
+
+        return self._get(path, params=params, full_url=True)
+
+    def get_token_prices_at_intervals(
+            self,
+            coins: str,
+            start: int,
+            end: int,
+            span: int = 0,
+            period: str = '2d',
+            searchWidth: str = '600'
+    ):
+        """
+        Get token prices at regular time intervals
+        """
+        path = f"/chart/{coins}"
+
+        params = {
+            'start': start,
+            'end': end,
+            'span': span,
+            'period': period,
+            'searchWidth': searchWidth
+        }
+
+        return self._get(path, params=params)
+
+    def get_percentage_price_change(self, coins: str, timestamp: int, lookForward: bool = False, period: str = '3w'):
+        """
+        Get percentage change in price over time
+        """
+        path = f"/percentage/{coins}"
+
+        params = {
+            'timestamp': timestamp,
+            'lookForward': lookForward,
+            'period': period
+        }
+
+        return self._get(path, params=params)
+
+    def get_earliest_ts_price(self, coins: str):
+        """
+        Get earliest timestamp price record for coins
+        """
+        path = f"/percentage/{coins}"
+
+        return self._get(path)
+
+    def get_closest_ts_block(self, chain: str, timestamp: int):
+        """
+        Get the closest block to a timestamp
+        """
+        path = f"/block/{chain}/{timestamp}"
+
+        return self._get(path)
+
+    # ##### Stablecoins EPs ###### #
+
+    def get_stablecoins(self, include_prices: bool = True):
+        """
+        List all stablecoins along with their circulating amounts
+        """
+        path = "https://stablecoins.llama.fi/stablecoins"
+
+        params = {
+            'includePrices': include_prices
+        }
+
+        return self._get(path, params=params, full_url=True)
+
+    def get_stablecoins_all_historical_mcap_sum(self, stablecoin_id: int):
+        """
+        Get historical mcap sum of all stablecoins
+        """
+        path = "https://stablecoins.llama.fi/stablecoincharts/all"
+
+        params = {
+            'stablecoin': stablecoin_id
+        }
+
+        return self._get(path, params=params, full_url=True)
+
+    def get_stablecoins_chains_all_historical_mcap_sum(self, chain: str, stablecoin_id: int):
+        """
+        Get historical mcap sum of all stablecoins in a chain
+        """
+        path = f"https://stablecoins.llama.fi/stablecoincharts/{chain}"
+
+        params = {
+            'stablecoin': stablecoin_id
+        }
+
+        return self._get(path, params=params, full_url=True)
+
+    def get_stablecoins_historical_mcap_n_chain_distribution(self, stablecoin_id: int):
+        """
+        Get historical mcap & historical chain distribution of a stablecoin
+        """
+        path = f"https://stablecoins.llama.fi/stablecoin/{stablecoin_id}"
+
+        return self._get(path, full_url=True)
+
+    def get_stablecoins_all_current_mcap_sum(self):
+        """
+        Get current mcap sum of all stablecoins on each chain
+        """
+        path = f"https://stablecoins.llama.fi/stablecoinchains"
+
+        return self._get(path, full_url=True)
+
+    def get_stablecoins_historical_prices(self):
+        """
+        Get historical prices of all stablecoins
+        """
+        path = f"https://stablecoins.llama.fi/stablecoinprices"
+
+        return self._get(path, full_url=True)
+
+    # ##### Yields EPs ###### #
+
+    def get_pools(self):
+        """
+        Get the latest data for all pools
+        """
+        path = 'https://yields.llama.fi/pools'
+
+        return self._get(path, full_url=True)
+
+    def get_pool(self, pool: str):
+        """
+        Get the historical APY & TVL data for a pool
+        """
+        path = f'https://yields.llama.fi/chart/{pool}'
+
+        return self._get(path, full_url=True)
+
+    # ##### Volumes EPs ###### #
+
+    def get_dexs(self, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyVolume'):
+        """
+        list all dexs
+        """
+        path = '/overview/dexs'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_chain_dexs(self, chain, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyVolume'):
+        """
+        list all dexs filter by chain
+        """
+        path = f'/overview/dexs/{chain}'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_dex_summary(self, protocol, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyVolume'):
+        """
+        get summary of dex volume with historical data
+        """
+        path = f'/summary/dexs/{protocol}'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_options_dexs(self, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyVolume'):
+        """
+        list all options dexs
+        """
+        path = '/overview/options'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_chain_options_dexs(self, chain, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyVolume'):
+        """
+        list all options dexs
+        """
+        path = f'/overview/options/{chain}'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_options_dex_summary(self, protocol, dataType='dailyPremiumVolume'):
+        """
+        get summary of option dex volume with historical data
+        """
+        path = f'/summary/options/{protocol}'
+        params = {
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    # ##### Fees & Revenue EPs ###### #
+
+    def get_fees(self, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyFees'):
+        """
+                list all protocols along with summaries of their fees & revenue & dataType history data
+        """
+        path = f'/overview/fees'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_fees_chain(self, chain, excludeTotalDataChart=True, excludeTotalDataChartBreakdown=True, dataType='dailyFees'):
+        """
+            list all protocols along with summaries of their fees & revenue & dataType history data by chain
+        """
+        path = f'/overview/fees/{chain}'
+        params = {
+            'excludeTotalDataChart': excludeTotalDataChart,
+            'excludeTotalDataChartBreakdown': excludeTotalDataChartBreakdown,
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
+
+    def get_fees_protocol(self, protocol, dataType='dailyFees'):
+        """
+            Get summary of protocol fees and revenue with historical data
+        """
+        path = f'/summary/fees/{protocol}'
+        params = {
+            'dataType': dataType
+        }
+
+        return self._get(path, params=params)
