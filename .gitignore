@@ -1,12 +1,17 @@
+# Ignore specific directories
+/venv/
 /cache/
 /logs/
 /perplexity_cache/
-/venv/
+
+# Ignore .env file
 .env
 
+# Allow specific files
 !.gitignore
 !README.md
 !main.py
 !requirements.txt
 
+# Ignore everything else
 *
