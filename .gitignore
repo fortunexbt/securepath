@@ -4,10 +4,3 @@
 !README.md
 !main.py
 !requirements.txt
-!*/
-venv/
-.env
-.env.*
-*.bot.log
-*.pyc
-.DS_Store
