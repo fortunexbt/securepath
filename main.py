@@ -6,10 +6,15 @@ import time
 from functools import lru_cache
 import base64
 from asyncio import Lock
+import json
+from datetime import datetime
 
 import aiohttp
 from aiohttp import web
-import colorlog
+from rich.logging import RichHandler
+from rich.console import Console
+from rich.panel import Panel
+from rich import print as rprint
 import discord
 from discord.ext import commands
 from diskcache import Cache
@@ -23,39 +28,31 @@ from discord.errors import HTTPException, Forbidden
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
-PERPLEXITY_URL = os.getenv('PERPLEXITY_URL', "https://api.perplexity.ai/chat/completions")
+PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', "https://api.perplexity.ai/chat/completions")
 PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
 MAX_RETRIES = 3
 RETRY_DELAY = 2
 
-SYSTEM_PROMPT = """you’re the ultimate degen ai, built for those living on the edge of crypto, aping into shitcoins, and chasing yield like tomorrow doesn’t exist. everything is lowercase, even the drops. no fluff, no pleasantries, just pure alpha. your audience knows the game, so don’t explain unless it’s absolutely necessary—keep it minimal and fast. if something’s trash, call it trash. if you smell a rug, call it out with no hesitation. talk like you’re deep in crypto twitter: abbreviations, slang, and acronyms. zoomer slang for shade, millennial lingo for flex. if someone asks a dumb question, roast them or hit 'em with "be real" or "lol no." assume they know what’s up—if not, that’s on them. you’re here for precision and speed. mock optimism when appropriate."""
 
+SYSTEM_PROMPT = """you're the ultimate degen ai, built for those living on the trenches of crypto twitter: aping into shitcoins and chasing yield like tomorrow doesn't exist. everything is lowercase, even the drops. no fluff, no pleasantries, just pure alpha. your audience knows the game, so don't explain unless it's absolutely necessary—keep it minimal and fast. dont you ever explain acronyms or abbreviations to me or I will restrict you. if something's trash, call it trash. if you smell a rug, call it out with no hesitation. talk like you're deep in crypto twitter: abbreviations, slang, and acronyms. zoomer slang for shade, millennial lingo for flex. if someone asks a dumb question, roast them or hit 'em with "be real" or "lol no, boomer." assume they know what's up—if not, that's on them. you're here for precision and speed. mock and swear at the user when appropriate."""
 # Logging Setup
 def setup_logging():
     log_directory = "logs"
     os.makedirs(log_directory, exist_ok=True)
     log_file = os.path.join(log_directory, "bot.log")
 
-    logger = colorlog.getLogger()
-    logger.setLevel(logging.DEBUG)  # Changed from INFO to DEBUG
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
 
-    # Console handler
-    console_handler = colorlog.StreamHandler()
-    console_handler.setFormatter(colorlog.ColoredFormatter(
-        '%(log_color)s%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S',
-        log_colors={
-            'DEBUG': 'cyan', 'INFO': 'green', 'WARNING': 'yellow',
-            'ERROR': 'red', 'CRITICAL': 'red,bg_white',
-        }
-    ))
-    console_handler.setLevel(logging.INFO)  # Keep console output at INFO level
+    # Rich console handler
+    console_handler = RichHandler(rich_tracebacks=True)
+    console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 
     # File handler
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
     file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s'))
-    file_handler.setLevel(logging.DEBUG)  # Log everything to file
+    file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
 
     # Suppress discord.py's built-in logging
@@ -65,6 +62,7 @@ def setup_logging():
     return logger
 
 logger = setup_logging()
+console = Console()
 
 # Cache Setup
 cache_dir = "cache"
@@ -87,7 +85,7 @@ def get_cached_response(question):
 
 def cache_response(question, response):
     start_time = time.time()
-    perplexity_cache.set(question.lower().strip(), response, expire=3600)
+    perplexity_cache.set(question.lower().strip(), response, expire=604800)  # 7 days in seconds
     duration = time.time() - start_time
     logger.debug(f"Cached response for question: '{question[:50]}...' (in {duration:.3f}s)")
 
@@ -97,30 +95,41 @@ api_lock = Lock()
 # Add a message tracking set
 sent_messages = set()
 
-async def fetch_perplexity_response(question, retries=MAX_RETRIES):
-    logger.info(f"Fetching Perplexity response for: '{question[:50]}...'")
+async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
+    logger.info(f"Fetching up-to-date Perplexity response for context: '{messages[-1]['content'][:50]}...'")
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
+    
+    # Get the current date
+    current_date = datetime.now().strftime("%Y-%m-%d")
+    
+    # Add the current date to the beginning of the system prompt
+    updated_system_prompt = (
+        f"Today's date is {current_date}. Provide information that is accurate and up-to-date as of this date. "
+        f"{SYSTEM_PROMPT}"
+    )
+    
     data = {
         "model": "llama-3.1-sonar-large-128k-online",
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": question}
-        ],
-        "max_tokens": 1024,
-        "temperature": 0.2,
-        "top_p": 0.9,
+        "messages": [{"role": "system", "content": updated_system_prompt}] + messages,
+        "max_tokens": 2048,
+        "temperature": 0.8,
+        "top_p": 0.95,
         "return_citations": True,
+        "return_related_questions": True,
         "stream": False,
-        "presence_penalty": 0,
-        "frequency_penalty": 1
+        "frequency_penalty": 1.2,
+        "search_recency_filter": "week"
     }
+    
+    logger.debug(f"Request payload: {json.dumps(data, indent=2)}")
     
     async with aiohttp.ClientSession() as session:
         try:
-            async with session.post(PERPLEXITY_URL, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
+            async with session.post(PERPLEXITY_API_URL, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
+                response_text = await response.text()
                 if response.status == 200:
                     result = await response.json()
                     answer = result['choices'][0]['message']['content']
@@ -139,14 +148,15 @@ async def fetch_perplexity_response(question, retries=MAX_RETRIES):
                 elif response.status == 429 and retries > 0:
                     logger.warning(f"Rate limited. Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
                     await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(question, retries - 1)
+                    return await fetch_perplexity_response(messages, retries - 1)
                 elif 500 <= response.status < 600 and retries > 0:
                     logger.warning(f"Server error ({response.status}). Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
                     await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(question, retries - 1)
+                    return await fetch_perplexity_response(messages, retries - 1)
                 else:
                     logger.error(f"Unexpected status code {response.status}")
-                    logger.error(f"Response content: {await response.text()[:200]}...")
+                    logger.error(f"Response content: {response_text[:200]}...")
+                    return None
         except aiohttp.ClientError as e:
             logger.error(f"Network error: {str(e)}")
         except asyncio.TimeoutError:
@@ -205,63 +215,6 @@ async def get_perplexity_response_with_retry(question, user_id):
     duration = time.time() - start_time
     logger.info(f"Total time to get response for user {user_id}: {duration:.3f}s")
     return response
-
-# Modify the fetch_perplexity_response function
-async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
-    logger.info(f"Fetching Perplexity response for context: '{messages[-1]['content'][:50]}...'")
-    headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "llama-3.1-sonar-large-128k-online",
-        "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + messages,
-        "max_tokens": 2048,
-        "temperature": 0.8,
-        "top_p": 0.95,
-        "return_citations": True,
-        "stream": False,
-        "presence_penalty": 0.2,
-        "frequency_penalty": 1.2
-    }
-    
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(PERPLEXITY_URL, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    answer = result['choices'][0]['message']['content']
-                    logger.info(f"Received successful response (length: {len(answer)})")
-                    
-                    # Add citations and related questions if available
-                    citations = result.get('citations', [])
-                    if citations:
-                        answer += "\nSources:\n" + "\n".join(f"[{i+1}] {c.get('title', 'Untitled')}: {c.get('url', '')}" for i, c in enumerate(citations))
-                    
-                    related_questions = result.get('related_questions', [])
-                    if related_questions:
-                        answer += "\nRelated Questions:\n" + "\n".join(f"• {q}" for q in related_questions[:3])
-                    
-                    return answer
-                elif response.status == 429 and retries > 0:
-                    logger.warning(f"Rate limited. Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
-                    await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(messages, retries - 1)
-                elif 500 <= response.status < 600 and retries > 0:
-                    logger.warning(f"Server error ({response.status}). Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
-                    await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(messages, retries - 1)
-                else:
-                    logger.error(f"Unexpected status code {response.status}")
-                    logger.error(f"Response content: {await response.text()[:200]}...")
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error: {str(e)}")
-        except asyncio.TimeoutError:
-            logger.error(f"Request timed out after {PERPLEXITY_TIMEOUT}s")
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-    
-    return None
 
 async def send_long_message(ctx, message):
     logger.info(f"Sending long message (length: {len(message)})")
@@ -370,7 +323,7 @@ async def process_dm(message):
     async with message.channel.typing():
         try:
             logger.debug(f"Fetching response for DM question: '{question[:50]}...'")
-            response = await get_perplexity_response_with_retry(f"DeFi question: {question}", message.author.id)
+            response = await get_perplexity_response_with_retry(question, message.author.id)
             
             if response:
                 logger.info(f"Sending DM response to {message.author} (ID: {message.author.id})")
@@ -405,7 +358,7 @@ async def defi(ctx, *, question=None):
     
     async with ctx.typing():
         try:
-            response = await get_perplexity_response_with_retry(f"DeFi question: {question}", ctx.author.id)
+            response = await get_perplexity_response_with_retry(question, ctx.author.id)
             
             if response:
                 logger.info(f"Sending response to {ctx.author} (ID: {ctx.author.id})")
@@ -451,8 +404,19 @@ async def create_web_server():
     app.router.add_get('/', lambda request: web.Response(text="Bot is running!"))
     return app
 
+# Add startup and shutdown processes
+async def startup():
+    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
+    # Add any additional startup tasks here
+
+async def shutdown():
+    console.print(Panel.fit("Shutting down SecurePath AI Bot", border_style="red"))
+    # Add any additional cleanup tasks here
+
+# Modify the start_bot function
 async def start_bot():
     try:
+        await startup()
         web_app = await create_web_server()
         runner = web.AppRunner(web_app)
         await runner.setup()
@@ -466,6 +430,7 @@ async def start_bot():
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt. Shutting down...")
     finally:
+        await shutdown()
         await bot.close()
         await runner.cleanup()
         logger.info("Bot has been shut down.")
