@@ -216,13 +216,13 @@ async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
     data = {
         "model": "llama-3.1-sonar-large-128k-online",
         "messages": [{"role": "system", "content": SYSTEM_PROMPT}] + messages,
-        "max_tokens": 1024,
-        "temperature": 0.2,
-        "top_p": 0.9,
+        "max_tokens": 2048,
+        "temperature": 0.8,
+        "top_p": 0.95,
         "return_citations": True,
         "stream": False,
-        "presence_penalty": 0,
-        "frequency_penalty": 1
+        "presence_penalty": 0.2,
+        "frequency_penalty": 1.2
     }
     
     async with aiohttp.ClientSession() as session:
