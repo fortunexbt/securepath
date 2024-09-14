@@ -1,6 +1,12 @@
-# Ignore everything
-*
+/cache/
+/logs/
+/perplexity_cache/
+/venv/
+.env
+
 !.gitignore
 !README.md
 !main.py
 !requirements.txt
+
+*
