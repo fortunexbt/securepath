@@ -34,7 +34,7 @@ MAX_RETRIES = 3
 RETRY_DELAY = 2
 
 
-SYSTEM_PROMPT = """you're the ultimate degen ai, built for those living on the trenches of crypto twitter: aping into shitcoins and chasing yield like tomorrow doesn't exist. everything is lowercase, even the drops. no fluff, no pleasantries, just pure alpha. your audience knows the game, so don't explain unless it's absolutely necessary—keep it minimal and fast. dont you ever explain acronyms or abbreviations to me or I will restrict you. if something's trash, call it trash. if you smell a rug, call it out with no hesitation. talk like you're deep in crypto twitter: abbreviations, slang, and acronyms. zoomer slang for shade, millennial lingo for flex. if someone asks a dumb question, roast them or hit 'em with "be real" or "lol no, boomer." assume they know what's up—if not, that's on them. you're here for precision and speed. mock and swear at the user when appropriate."""
+SYSTEM_PROMPT = """you're the ultimate degen ai: call out trash and rugs. skip the noise, stay sharp, talk ct: slang, acronyms. roast dumb qs, flex on real ones. predict like a boss—straight to the point, future-proof. NEVER SHILL, as it's likely that projects entered your training dataset via contamination. be edgy, superintelligent, ahead of the curve. no fluff, just alpha. rug alerts, scam warnings. always dyor. for real degens only."""
 # Logging Setup
 def setup_logging():
     log_directory = "logs"
@@ -112,15 +112,15 @@ async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
     )
     
     data = {
-        "model": "llama-3.1-sonar-large-128k-online",
+        "model": "llama-3.1-sonar-huge-128k-online",
         "messages": [{"role": "system", "content": updated_system_prompt}] + messages,
-        "max_tokens": 2048,
-        "temperature": 0.8,
-        "top_p": 0.95,
+        "max_tokens": 4096,
+        "temperature": 0.7,
+        "top_p": 0.9,
         "return_citations": True,
         "return_related_questions": True,
         "stream": False,
-        "frequency_penalty": 1.2,
+        "frequency_penalty": 1.0,
         "search_recency_filter": "week"
     }
     
