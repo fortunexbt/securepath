@@ -133,7 +133,8 @@ async def fetch_perplexity_response(user_id, new_message):
     data = {
         "model": "llama-3.1-sonar-large-128k-online",
         "messages": messages,
-        "max_tokens": 1000
+        "max_tokens": 1000,
+        "search_recency_filter": "day"
     }
     
     logger.info(f"Sending query to Perplexity:\n{json.dumps(data, indent=2)}")
@@ -321,6 +322,18 @@ async def start_bot():
         logger.info("Calling startup function")
         await startup()
         
+        # Create and start the web server
+        app = web.Application()
+        app.router.add_get("/", lambda request: web.Response(text="Bot is running"))
+        
+        runner = web.AppRunner(app)
+        await runner.setup()
+        port = int(os.environ.get('PORT', 10000))
+        site = web.TCPSite(runner, '0.0.0.0', port)
+        await site.start()
+        
+        logger.info(f"Web server started on port {port}")
+        
         logger.info("Starting bot")
         await bot.start(DISCORD_TOKEN)
         
@@ -334,6 +347,8 @@ async def start_bot():
             await session.close()
         if conn:
             await conn.close()
+        if 'runner' in locals():
+            await runner.cleanup()
 
 if __name__ == "__main__":
     try:
