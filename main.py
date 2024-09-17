@@ -167,7 +167,7 @@ async def fetch_perplexity_response(user_id, new_message):
         raise
 
 async def send_long_message(ctx, message):
-    max_length = 1900  # Leaving some buffer for potential formatting
+    max_length = 4096  # Maximum length for embed description
 
     # Check if message is a dictionary and extract the content
     if isinstance(message, dict):
@@ -176,33 +176,18 @@ async def send_long_message(ctx, message):
     if not message:
         return None
 
-    if len(message) <= max_length:
-        try:
-            return await ctx.send(message)
-        except (HTTPException, Forbidden):
-            return None
-
-    # Split the message into paragraphs
-    paragraphs = re.split(r'\n\s*\n', message)
-    parts = []
-    current_part = ""
-
-    for paragraph in paragraphs:
-        if len(current_part) + len(paragraph) + 2 <= max_length:  # +2 for newlines
-            current_part += paragraph + "\n\n"
-        else:
-            if current_part:
-                parts.append(current_part.strip())
-            current_part = paragraph + "\n\n"
-
-    if current_part:
-        parts.append(current_part.strip())
+    # Split the message into parts if it's too long
+    message_parts = [message[i:i+max_length] for i in range(0, len(message), max_length)]
 
     last_sent_message = None
-    for i, part in enumerate(parts):
+    for i, part in enumerate(message_parts):
+        embed = discord.Embed(description=part, color=0x00ff00)  # Green color
+        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+        embed.set_footer(text=f"Part {i+1}/{len(message_parts)}" if len(message_parts) > 1 else "")
+        
         try:
-            sent_message = await ctx.send(part)
-            if i == len(parts) - 1:  # Last part
+            sent_message = await ctx.send(embed=embed)
+            if i == len(message_parts) - 1:  # Last part
                 last_sent_message = sent_message
         except (HTTPException, Forbidden):
             break
@@ -256,6 +241,53 @@ async def send_periodic_stats():
     await send_stats()
 
 @bot.event
+async def on_ready():
+    logger.info(f'{bot.user} has connected to Discord!')
+    logger.info(f'Bot is active in {len(bot.guilds)} guilds')
+    logger.info("Bot is ready to receive DMs")
+    
+    # Wait a short time to ensure all channels are cached
+    await asyncio.sleep(2)
+    
+    await send_stats()  # Send initial stats when bot is ready
+
+# Make sure this function is defined before it's used
+async def process_message(message, question=None):
+    if not question:
+        question = message.content.strip()
+        if not isinstance(message.channel, discord.DMChannel):
+            question = question[6:].strip()  # Remove '!defi ' from the start
+
+    logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
+
+    if len(question) < 5:
+        await message.channel.send("Please provide a more detailed question (at least 5 characters).")
+        return
+    if len(question) > 500:
+        await message.channel.send("Your question is too long. Please limit it to 500 characters.")
+        return
+
+    async with message.channel.typing():
+        try:
+            update_user_context(message.author.id, question)
+            
+            response = await fetch_perplexity_response(message.author.id, question)
+            if response and 'choices' in response:
+                answer = response['choices'][0]['message']['content']
+                update_user_context(message.author.id, answer, is_bot_response=True)
+                await log_to_channel(answer, bot.user, is_response=True)
+                await send_long_message(message.channel, answer)
+            else:
+                error_message = "I'm sorry, I couldn't get a response. Please try again later."
+                await log_to_channel(error_message, bot.user, is_response=True)
+                await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}", exc_info=True)
+            error_message = "An unexpected error occurred. Please try again later."
+            await log_to_channel(error_message, bot.user, is_response=True)
+            await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
+
+@bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
@@ -290,53 +322,6 @@ async def on_command_error(ctx, error):
     else:
         logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
-
-# Bot Commands
-@bot.event
-async def on_ready():
-    logger.info(f'{bot.user} has connected to Discord!')
-    logger.info(f'Bot is active in {len(bot.guilds)} guilds')
-    logger.info("Bot is ready to receive DMs")
-    
-    # Wait a short time to ensure all channels are cached
-    await asyncio.sleep(2)
-    
-    await send_stats()  # Send initial stats when bot is ready
-
-async def process_message(message, question=None):
-    if not question:
-        question = message.content.strip()
-        if not isinstance(message.channel, discord.DMChannel):
-            question = question[6:].strip()  # Remove '!defi ' from the start
-
-    logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
-
-    if len(question) < 5:
-        await message.channel.send("Please provide a more detailed question (at least 5 characters).")
-        return
-    if len(question) > 500:
-        await message.channel.send("Your question is too long. Please limit it to 500 characters.")
-        return
-
-    async with message.channel.typing():
-        try:
-            update_user_context(message.author.id, question)
-            
-            response = await fetch_perplexity_response(message.author.id, question)
-            if response and 'choices' in response:
-                answer = response['choices'][0]['message']['content']
-                update_user_context(message.author.id, answer, is_bot_response=True)
-                await log_to_channel(answer, bot.user, is_response=True)
-                await send_long_message(message.channel, answer)
-            else:
-                error_message = "I'm sorry, I couldn't get a response. Please try again later."
-                await log_to_channel(error_message, bot.user, is_response=True)
-                await message.channel.send(error_message)
-        except Exception as e:
-            logger.error(f"Error processing message: {str(e)}", exc_info=True)
-            error_message = "An unexpected error occurred. Please try again later."
-            await log_to_channel(error_message, bot.user, is_response=True)
-            await message.channel.send(error_message)
 
 def quiet_exit():
     """Exit the program quietly without showing any tracebacks."""
