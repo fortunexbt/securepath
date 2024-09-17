@@ -14,6 +14,7 @@ import re
 
 import aiohttp
 from aiohttp import web, ClientSession, TCPConnector, ClientTimeout
+from aiohttp.web_log import AccessLogger
 from rich.logging import RichHandler
 from rich.console import Console
 from rich.panel import Panel
@@ -322,11 +323,17 @@ async def start_bot():
         logger.info("Calling startup function")
         await startup()
         
-        # Create and start the web server
+        # Create and start the web server with custom access logger
         app = web.Application()
         app.router.add_get("/", lambda request: web.Response(text="Bot is running"))
         
-        runner = web.AppRunner(app)
+        class CustomAccessLogger(AccessLogger):
+            def log(self, request, response, time):
+                # Only log non-200 responses or if it's not a GET request to "/"
+                if response.status != 200 or request.path != "/":
+                    super().log(request, response, time)
+
+        runner = web.AppRunner(app, access_log_class=CustomAccessLogger)
         await runner.setup()
         port = int(os.environ.get('PORT', 10000))
         site = web.TCPSite(runner, '0.0.0.0', port)
