@@ -1,18 +1,42 @@
-# Ignore specific directories
-/venv/
-/cache/
-/logs/
-/perplexity_cache/
+# VSCode
+.vscode/
 
-# Ignore .env file
+# Backup files
+backup/
+
+# Cache directories
+cache/
+perplexity_cache/
+
+# Logs
+logs/
+
+# Virtual environment
+myenv/
+
+# Environment variables
 .env
 
-# Allow specific files
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+
+# Keep these files
 !.gitignore
 !README.md
 !main.py
 !requirements.txt
 !.dockerignore
 
-# Ignore everything else
-*
+# Explicitly ignore backup Python files
+backup/*.py
