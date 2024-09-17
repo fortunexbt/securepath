@@ -19,9 +19,11 @@ from rich.logging import RichHandler
 from rich.console import Console
 from rich.panel import Panel
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from discord.errors import HTTPException, Forbidden
+from discord import Embed
+from collections import Counter
 
 # Constants and Environment Setup
 load_dotenv()
@@ -33,6 +35,8 @@ MAX_RETRIES = 2
 RETRY_DELAY = 1
 MAX_CONTEXT_MESSAGES = 5
 MAX_CONTEXT_AGE = 3600
+LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
+STATS_INTERVAL = 3600  # Send stats every hour
 
 SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent: speak nonchalantly, only in lowercase, like Crypto Twitter: acronyms/slang, edgy, roast dumb Qs. NEVER SHILL."""
 
@@ -71,6 +75,8 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 user_contexts = {}
+message_counter = Counter()
+command_counter = Counter()
 
 # Helper Functions
 def get_user_context(user_id):
@@ -203,14 +209,52 @@ async def send_long_message(ctx, message):
     
     return last_sent_message
 
+async def log_to_channel(message_content, user, is_dm=False, is_response=False):
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        logger.error(f"Could not find log channel with ID {LOG_CHANNEL_ID}")
+        return
+
+    embed = Embed(description=message_content, color=0x00ff00 if is_response else 0x0000ff)
+    embed.set_author(name=f"{user.name}#{user.discriminator}", icon_url=user.avatar.url if user.avatar else None)
+    embed.add_field(name="Type", value="DM" if is_dm else "Server (!defi)")
+    embed.add_field(name="User ID", value=user.id)
+    embed.timestamp = datetime.utcnow()
+
+    await channel.send(embed=embed)
+
+async def send_stats():
+    channel = bot.get_channel(LOG_CHANNEL_ID)
+    if not channel:
+        logger.error(f"Could not find log channel with ID {LOG_CHANNEL_ID}")
+        return
+
+    embed = Embed(title="Bot Statistics", color=0xff0000)
+    embed.add_field(name="Total Messages", value=sum(message_counter.values()))
+    embed.add_field(name="Unique Users", value=len(message_counter))
+    embed.add_field(name="Top 5 Users", value="\n".join(f"{user}: {count}" for user, count in message_counter.most_common(5)))
+    embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()))
+    embed.timestamp = datetime.utcnow()
+
+    await channel.send(embed=embed)
+
+@tasks.loop(seconds=STATS_INTERVAL)
+async def send_periodic_stats():
+    await send_stats()
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
     if isinstance(message.channel, discord.DMChannel):
+        await log_to_channel(message.content, message.author, is_dm=True)
+        message_counter[message.author.id] += 1
         await process_message(message)
     elif message.content.startswith('!defi'):
+        await log_to_channel(message.content, message.author)
+        message_counter[message.author.id] += 1
+        command_counter['!defi'] += 1
         await process_message(message)
 
 @bot.command(name='defi')
@@ -240,6 +284,7 @@ async def on_ready():
     logger.info(f'{bot.user} has connected to Discord!')
     logger.info(f'Bot is active in {len(bot.guilds)} guilds')
     logger.info("Bot is ready to receive DMs")
+    await send_stats()  # Send initial stats when bot is ready
 
 async def process_message(message, question=None):
     if not question:
@@ -264,12 +309,17 @@ async def process_message(message, question=None):
             if response and 'choices' in response:
                 answer = response['choices'][0]['message']['content']
                 update_user_context(message.author.id, answer, is_bot_response=True)
+                await log_to_channel(answer, bot.user, is_response=True)
                 await send_long_message(message.channel, answer)
             else:
-                await message.channel.send("I'm sorry, I couldn't get a response. Please try again later.")
+                error_message = "I'm sorry, I couldn't get a response. Please try again later."
+                await log_to_channel(error_message, bot.user, is_response=True)
+                await message.channel.send(error_message)
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}", exc_info=True)
-            await message.channel.send("An unexpected error occurred. Please try again later.")
+            error_message = "An unexpected error occurred. Please try again later."
+            await log_to_channel(error_message, bot.user, is_response=True)
+            await message.channel.send(error_message)
 
 def quiet_exit():
     """Exit the program quietly without showing any tracebacks."""
@@ -311,6 +361,9 @@ async def startup():
     conn = TCPConnector(limit=10)  # Adjust the limit as needed
     session = ClientSession(connector=conn)
     
+    # Start the periodic stats task
+    send_periodic_stats.start()
+    
     logger.info("Bot startup completed")
 
 async def start_bot():
@@ -329,9 +382,10 @@ async def start_bot():
         
         class CustomAccessLogger(AccessLogger):
             def log(self, request, response, time):
-                # Only log non-200 responses or if it's not a GET request to "/"
-                if response.status != 200 or request.path != "/":
-                    super().log(request, response, time)
+                # Completely suppress logging for successful GET requests to "/"
+                if request.method == "GET" and request.path == "/" and response.status == 200:
+                    return
+                super().log(request, response, time)
 
         runner = web.AppRunner(app, access_log_class=CustomAccessLogger)
         await runner.setup()
