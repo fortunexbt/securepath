@@ -181,7 +181,7 @@ async def send_long_message(ctx, message):
 
     last_sent_message = None
     for i, part in enumerate(message_parts):
-        embed = discord.Embed(description=part, color=0x00ff00)  # Green color
+        embed = discord.Embed(description=part, color=0x004200)  # Green color
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
         embed.set_footer(text=f"Part {i+1}/{len(message_parts)}" if len(message_parts) > 1 else "")
         
@@ -210,7 +210,7 @@ async def log_to_channel(message_content, user, is_dm=False, is_response=False):
             logger.error(f"Error fetching log channel: {str(e)}")
             return
 
-    embed = Embed(description=message_content, color=0x00ff00 if is_response else 0x0000ff)
+    embed = Embed(description=message_content, color=0x004200 if is_response else 0x0000ff)
     embed.set_author(name=f"{user.name}#{user.discriminator}", icon_url=user.avatar.url if user.avatar else None)
     embed.add_field(name="Type", value="DM" if is_dm else "Server (!defi)")
     embed.add_field(name="User ID", value=user.id)
