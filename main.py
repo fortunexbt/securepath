@@ -114,7 +114,7 @@ async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
     data = {
         "model": "llama-3.1-sonar-huge-128k-online",
         "messages": [{"role": "system", "content": updated_system_prompt}] + messages,
-        "max_tokens": 4096,
+        "max_tokens": 2048,
         "temperature": 0.7,
         "top_p": 0.9,
         "return_citations": True,
