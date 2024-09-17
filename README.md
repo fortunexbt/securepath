@@ -18,8 +18,8 @@ SecurePath AI is a high-performance Discord bot built to deliver expert-level in
 - Python 3.9+
 - `pip` (Python package manager)
 - `git`
-- Discord bot setup: [Discord Developer Portal](https://discord.com/developers/applications)
-- Optional: API key for Perplexity or another knowledge API
+- Discord bot setup: [Discord Developer Portal](https://discord.com/developers/applications) (tutorial below)
+- REQUIRED: API key for Perplexity or another knowledge API
 
 ### Step 1: Clone the Repository
 
@@ -58,7 +58,7 @@ pip install -r requirements.txt
 Create a `.env` file in the project root with the following details:
 ```
 DISCORD_TOKEN=your_discord_bot_token
-PERPLEXITY_API_KEY=your_perplexity_api_key (if using)
+PERPLEXITY_API_KEY=your_perplexity_api_key
 PERPLEXITY_API_URL=https://api.perplexity.ai/chat/completions
 PERPLEXITY_TIMEOUT=60
 ```
@@ -104,10 +104,9 @@ What's the latest with Uniswap liquidity?
 
 ### Channel Commands
 
-In public channels, use the following commands:
+In public channels, use the following command:
 
-- `!defi <question>`: Ask about DeFi, crypto, or blockchain topics.
-- `!clear_context`: Reset the conversation context.
+- `!defi <question>`
 
 Example:
 ```
@@ -138,7 +137,3 @@ This project is licensed under the MIT License.
 ## Disclaimer
 
 SecurePath AI provides information for educational purposes only and should not be considered financial advice. Always conduct your own research (DYOR) before making investment decisions.
-
----
-
-This version simplifies the instructions, removes any redundant or unverified information (such as the use of APIs not confirmed to be in use), and streamlines the key features to match the core functionality of your bot.
