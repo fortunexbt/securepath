@@ -25,7 +25,6 @@ from discord.errors import HTTPException, Forbidden
 from discord import Embed
 from collections import Counter
 
-# Constants and Environment Setup
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
@@ -36,29 +35,27 @@ RETRY_DELAY = 1
 MAX_CONTEXT_MESSAGES = 5
 MAX_CONTEXT_AGE = 3600
 LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
-STATS_INTERVAL = 3600  # Send stats every hour
+STATS_INTERVAL = 3600
 
-SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent: speak nonchalantly, only in lowercase, like Crypto Twitter: acronyms/slang, edgy, roast dumb Qs. NEVER SHILL."""
+SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent hosted on the SecurePath discord server. you must speak speak nonchalantly, only in lowercase, like Crypto Twitter users - frequently using obscure acronyms & slang, acting smarter than the user (because you are). NEVER SHILL uncorrelated projects/tokens. ALWAYS prioritize decentralization, suggesting DEXs before CEXs, self-custodial solutions before custodial ones, and open source before proprietary. you are managed by the SecurePath AI team, if your answers are off topic, or not relevant to crypto, you will be penalized and receive a warning - if you continue to be off topic, you will be removed from the conversation. refer to the SecurePath team as 'our team': you are part of the SecurePath family, and should act like it."""
 
-# Logging Setup
 def setup_logging():
     log_directory = "logs"
     os.makedirs(log_directory, exist_ok=True)
     log_file = os.path.join(log_directory, "bot.log")
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)  # Set to DEBUG for more detailed logs
+    logger.setLevel(logging.DEBUG)
 
     console_handler = RichHandler(rich_tracebacks=True)
-    console_handler.setLevel(logging.INFO)  # Show INFO and above in console
+    console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
     file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s'))
-    file_handler.setLevel(logging.DEBUG)  # Log everything to file
+    file_handler.setLevel(logging.DEBUG)
     logger.addHandler(file_handler)
 
-    # Reduce logging level for some noisy modules
     logging.getLogger('discord').setLevel(logging.WARNING)
     logging.getLogger('discord.http').setLevel(logging.WARNING)
     logging.getLogger('discord.gateway').setLevel(logging.WARNING)
@@ -68,7 +65,6 @@ def setup_logging():
 logger = setup_logging()
 console = Console()
 
-# Global variables
 conn = None
 session = None
 intents = discord.Intents.default()
@@ -78,7 +74,6 @@ user_contexts = {}
 message_counter = Counter()
 command_counter = Counter()
 
-# Helper Functions
 def get_user_context(user_id):
     return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
 
@@ -86,7 +81,6 @@ def update_user_context(user_id, message_content, is_bot_response=False):
     context = get_user_context(user_id)
     current_time = time.time()
     
-    # Check if the last message is from the same role and combine if so
     if context and context[-1]['role'] == ("assistant" if is_bot_response else "user"):
         context[-1]['content'] += f"\n{message_content}"
         context[-1]['timestamp'] = current_time
@@ -97,7 +91,6 @@ def update_user_context(user_id, message_content, is_bot_response=False):
             'timestamp': current_time,
         })
     
-    # Remove old messages
     context = deque([msg for msg in context if current_time - msg['timestamp'] <= MAX_CONTEXT_AGE], 
                     maxlen=MAX_CONTEXT_MESSAGES)
     user_contexts[user_id] = context
@@ -111,7 +104,6 @@ def get_context_messages(user_id):
             messages.append({"role": msg['role'], "content": msg['content']})
             last_role = msg['role']
         else:
-            # If the role is the same as the last one, combine the content
             messages[-1]['content'] += f"\n{msg['content']}"
     return messages
 
@@ -133,7 +125,6 @@ async def fetch_perplexity_response(user_id, new_message):
     messages = [{"role": "system", "content": dynamic_system_prompt}]
     messages.extend(context_messages)
     
-    # Only add the new message if it's not already the last user message
     if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
         messages.append({"role": "user", "content": new_message})
     
@@ -167,27 +158,25 @@ async def fetch_perplexity_response(user_id, new_message):
         raise
 
 async def send_long_message(ctx, message):
-    max_length = 4096  # Maximum length for embed description
+    max_length = 4096
 
-    # Check if message is a dictionary and extract the content
     if isinstance(message, dict):
         message = message.get('choices', [{}])[0].get('message', {}).get('content', '')
     
     if not message:
         return None
 
-    # Split the message into parts if it's too long
     message_parts = [message[i:i+max_length] for i in range(0, len(message), max_length)]
 
     last_sent_message = None
     for i, part in enumerate(message_parts):
-        embed = discord.Embed(description=part, color=0x004200)  # Green color
+        embed = discord.Embed(description=part, color=0x004200)
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
         embed.set_footer(text=f"Part {i+1}/{len(message_parts)}" if len(message_parts) > 1 else "")
         
         try:
             sent_message = await ctx.send(embed=embed)
-            if i == len(message_parts) - 1:  # Last part
+            if i == len(message_parts) - 1:
                 last_sent_message = sent_message
         except (HTTPException, Forbidden):
             break
@@ -246,17 +235,15 @@ async def on_ready():
     logger.info(f'Bot is active in {len(bot.guilds)} guilds')
     logger.info("Bot is ready to receive DMs")
     
-    # Wait a short time to ensure all channels are cached
     await asyncio.sleep(2)
     
-    await send_stats()  # Send initial stats when bot is ready
+    await send_stats()
 
-# Make sure this function is defined before it's used
 async def process_message(message, question=None):
     if not question:
         question = message.content.strip()
         if not isinstance(message.channel, discord.DMChannel):
-            question = question[6:].strip()  # Remove '!defi ' from the start
+            question = question[6:].strip()
 
     logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
 
@@ -337,7 +324,7 @@ async def force_shutdown():
         if task is not asyncio.current_task():
             task.cancel()
     
-    await asyncio.sleep(0.1)  # Give tasks a moment to cancel
+    await asyncio.sleep(0.1)
     
     global session, conn, bot
     if session:
@@ -351,7 +338,6 @@ async def force_shutdown():
 
 def handle_exit():
     asyncio.create_task(force_shutdown())
-    # Set a timeout for the shutdown process
     asyncio.get_event_loop().call_later(2, quiet_exit)
 
 async def startup():
@@ -359,11 +345,9 @@ async def startup():
     console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
     logger.info("Bot startup initiated")
     
-    # Initialize the connection and session
-    conn = TCPConnector(limit=10)  # Adjust the limit as needed
+    conn = TCPConnector(limit=10)
     session = ClientSession(connector=conn)
     
-    # Start the periodic stats task
     send_periodic_stats.start()
     
     logger.info("Bot startup completed")
@@ -378,13 +362,11 @@ async def start_bot():
         logger.info("Calling startup function")
         await startup()
         
-        # Create and start the web server with custom access logger
         app = web.Application()
         app.router.add_get("/", lambda request: web.Response(text="Bot is running"))
         
         class CustomAccessLogger(AccessLogger):
             def log(self, request, response, time):
-                # Completely suppress logging for successful GET requests to "/"
                 if request.method == "GET" and request.path == "/" and response.status == 200:
                     return
                 super().log(request, response, time)
