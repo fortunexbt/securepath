@@ -12,6 +12,7 @@
 !README.md
 !main.py
 !requirements.txt
+!.dockerignore
 
 # Ignore everything else
 *
