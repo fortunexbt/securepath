@@ -1,27 +1,25 @@
-import os
 import asyncio
+import os
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-from functools import lru_cache
-import base64
 from asyncio import Lock
 import json
 from datetime import datetime
+import signal
+import sys
+import traceback
+from collections import deque
+import re
 
 import aiohttp
-from aiohttp import web
+from aiohttp import web, ClientSession, TCPConnector, ClientTimeout
 from rich.logging import RichHandler
 from rich.console import Console
 from rich.panel import Panel
-from rich import print as rprint
 import discord
 from discord.ext import commands
-from diskcache import Cache
 from dotenv import load_dotenv
-from aiohttp_session import setup as setup_session
-from aiohttp_session.cookie_storage import EncryptedCookieStorage
-from cryptography import fernet
 from discord.errors import HTTPException, Forbidden
 
 # Constants and Environment Setup
@@ -30,11 +28,13 @@ DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', "https://api.perplexity.ai/chat/completions")
 PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
-MAX_RETRIES = 3
-RETRY_DELAY = 2
+MAX_RETRIES = 2
+RETRY_DELAY = 1
+MAX_CONTEXT_MESSAGES = 5
+MAX_CONTEXT_AGE = 3600
 
+SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent: speak nonchalantly, only in lowercase, like Crypto Twitter: acronyms/slang, edgy, roast dumb Qs. NEVER SHILL."""
 
-SYSTEM_PROMPT = """you're the ultimate degen ai: call out trash and rugs. skip the noise, stay sharp, talk ct: slang, acronyms. roast dumb qs, flex on real ones. predict like a boss—straight to the point, future-proof. NEVER SHILL, as it's likely that projects entered your training dataset via contamination. be edgy, superintelligent, ahead of the curve. no fluff, just alpha. rug alerts, scam warnings. always dyor. for real degens only."""
 # Logging Setup
 def setup_logging():
     log_directory = "logs"
@@ -42,241 +42,164 @@ def setup_logging():
     log_file = os.path.join(log_directory, "bot.log")
 
     logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)  # Set to DEBUG for more detailed logs
 
-    # Rich console handler
     console_handler = RichHandler(rich_tracebacks=True)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.INFO)  # Show INFO and above in console
     logger.addHandler(console_handler)
 
-    # File handler
     file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
     file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s'))
-    file_handler.setLevel(logging.DEBUG)
+    file_handler.setLevel(logging.DEBUG)  # Log everything to file
     logger.addHandler(file_handler)
 
-    # Suppress discord.py's built-in logging
-    for module in ['discord', 'discord.http', 'discord.gateway']:
-        logging.getLogger(module).setLevel(logging.WARNING)
+    # Reduce logging level for some noisy modules
+    logging.getLogger('discord').setLevel(logging.WARNING)
+    logging.getLogger('discord.http').setLevel(logging.WARNING)
+    logging.getLogger('discord.gateway').setLevel(logging.WARNING)
 
     return logger
 
 logger = setup_logging()
 console = Console()
 
-# Cache Setup
-cache_dir = "cache"
-os.makedirs(cache_dir, exist_ok=True)
-perplexity_cache = Cache(cache_dir)
-
-# Bot Setup
+# Global variables
+conn = None
+session = None
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
+user_contexts = {}
 
 # Helper Functions
-@lru_cache(maxsize=1000)
-def get_cached_response(question):
-    start_time = time.time()
-    result = perplexity_cache.get(question.lower().strip())
-    duration = time.time() - start_time
-    logger.debug(f"Cache {'hit' if result else 'miss'} for question: '{question[:50]}...' (in {duration:.3f}s)")
-    return result
+def get_user_context(user_id):
+    return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
 
-def cache_response(question, response):
-    start_time = time.time()
-    perplexity_cache.set(question.lower().strip(), response, expire=604800)  # 7 days in seconds
-    duration = time.time() - start_time
-    logger.debug(f"Cached response for question: '{question[:50]}...' (in {duration:.3f}s)")
+def update_user_context(user_id, message_content, is_bot_response=False):
+    context = get_user_context(user_id)
+    current_time = time.time()
+    
+    # Check if the last message is from the same role and combine if so
+    if context and context[-1]['role'] == ("assistant" if is_bot_response else "user"):
+        context[-1]['content'] += f"\n{message_content}"
+        context[-1]['timestamp'] = current_time
+    else:
+        context.append({
+            'role': "assistant" if is_bot_response else "user",
+            'content': message_content,
+            'timestamp': current_time,
+        })
+    
+    # Remove old messages
+    context = deque([msg for msg in context if current_time - msg['timestamp'] <= MAX_CONTEXT_AGE], 
+                    maxlen=MAX_CONTEXT_MESSAGES)
+    user_contexts[user_id] = context
 
-# Add a lock for API calls
-api_lock = Lock()
+def get_context_messages(user_id):
+    context = get_user_context(user_id)
+    messages = []
+    last_role = None
+    for msg in context:
+        if msg['role'] != last_role:
+            messages.append({"role": msg['role'], "content": msg['content']})
+            last_role = msg['role']
+        else:
+            # If the role is the same as the last one, combine the content
+            messages[-1]['content'] += f"\n{msg['content']}"
+    return messages
 
-# Add a message tracking set
-sent_messages = set()
+async def fetch_perplexity_response(user_id, new_message):
+    if session is None:
+        logger.error("Session is not initialized")
+        return None
 
-async def fetch_perplexity_response(messages, retries=MAX_RETRIES):
-    logger.info(f"Fetching up-to-date Perplexity response for context: '{messages[-1]['content'][:50]}...'")
     headers = {
         "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    # Get the current date
     current_date = datetime.now().strftime("%Y-%m-%d")
+    dynamic_system_prompt = f"today is {current_date}. all info must be accurate up to this date. {SYSTEM_PROMPT}"
     
-    # Add the current date to the beginning of the system prompt
-    updated_system_prompt = (
-        f"Today's date is {current_date}. Provide information that is accurate and up-to-date as of this date. "
-        f"{SYSTEM_PROMPT}"
-    )
+    context_messages = get_context_messages(user_id)
+    
+    messages = [{"role": "system", "content": dynamic_system_prompt}]
+    messages.extend(context_messages)
+    
+    # Only add the new message if it's not already the last user message
+    if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
+        messages.append({"role": "user", "content": new_message})
     
     data = {
-        "model": "llama-3.1-sonar-huge-128k-online",
-        "messages": [{"role": "system", "content": updated_system_prompt}] + messages,
-        "max_tokens": 2048,
-        "temperature": 0.7,
-        "top_p": 0.9,
-        "return_citations": True,
-        "return_related_questions": True,
-        "stream": False,
-        "frequency_penalty": 1.0,
-        "search_recency_filter": "week"
+        "model": "llama-3.1-sonar-large-128k-online",
+        "messages": messages,
+        "max_tokens": 1000
     }
     
-    logger.debug(f"Request payload: {json.dumps(data, indent=2)}")
+    logger.info(f"Sending query to Perplexity:\n{json.dumps(data, indent=2)}")
     
-    async with aiohttp.ClientSession() as session:
-        try:
-            async with session.post(PERPLEXITY_API_URL, headers=headers, json=data, timeout=PERPLEXITY_TIMEOUT) as response:
-                response_text = await response.text()
-                if response.status == 200:
-                    result = await response.json()
-                    answer = result['choices'][0]['message']['content']
-                    logger.info(f"Received successful response (length: {len(answer)})")
-                    
-                    # Add citations and related questions if available
-                    citations = result.get('citations', [])
-                    if citations:
-                        answer += "\nSources:\n" + "\n".join(f"[{i+1}] {c.get('title', 'Untitled')}: {c.get('url', '')}" for i, c in enumerate(citations))
-                    
-                    related_questions = result.get('related_questions', [])
-                    if related_questions:
-                        answer += "\nRelated Questions:\n" + "\n".join(f"• {q}" for q in related_questions[:3])
-                    
-                    return answer
-                elif response.status == 429 and retries > 0:
-                    logger.warning(f"Rate limited. Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
-                    await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(messages, retries - 1)
-                elif 500 <= response.status < 600 and retries > 0:
-                    logger.warning(f"Server error ({response.status}). Retrying in {RETRY_DELAY}s... (Attempts left: {retries-1})")
-                    await asyncio.sleep(RETRY_DELAY)
-                    return await fetch_perplexity_response(messages, retries - 1)
-                else:
-                    logger.error(f"Unexpected status code {response.status}")
-                    logger.error(f"Response content: {response_text[:200]}...")
-                    return None
-        except aiohttp.ClientError as e:
-            logger.error(f"Network error: {str(e)}")
-        except asyncio.TimeoutError:
-            logger.error(f"Request timed out after {PERPLEXITY_TIMEOUT}s")
-        except Exception as e:
-            logger.error(f"Unexpected error: {str(e)}", exc_info=True)
-    
-    return None
-
-# Add a new constant for session expiration
-SESSION_EXPIRATION = int(os.getenv('SESSION_EXPIRATION', 3600))  # 1 hour default
-
-# Add a new global variable to store user contexts
-user_contexts = {}
-
-# Add a new function to handle context
-async def get_or_create_context(user_id):
-    if user_id not in user_contexts:
-        user_contexts[user_id] = {
-            'messages': [],
-            'last_activity': time.time()
-        }
-    return user_contexts[user_id]
-
-# Modify the get_perplexity_response_with_retry function
-async def get_perplexity_response_with_retry(question, user_id):
-    logger.info(f"Attempting to get response for user {user_id}: '{question[:50]}...'")
     start_time = time.time()
-    
-    context = await get_or_create_context(user_id)
-    
-    # Check if the context has expired
-    if time.time() - context['last_activity'] > SESSION_EXPIRATION:
-        logger.debug(f"Context expired for user {user_id}. Resetting.")
-        context['messages'] = []
-    
-    context['messages'].append({"role": "user", "content": question})
-    context['last_activity'] = time.time()
-    
-    cached_response = get_cached_response(str(context['messages']))
-    if cached_response:
-        logger.info(f"Using cached response for user {user_id}")
-        return cached_response
-    
-    logger.info(f"No cache hit, fetching new response for user {user_id}")
-    async with api_lock:  # Ensure only one API call at a time
-        response = await fetch_perplexity_response(context['messages'])
-    
-    if response:
-        context['messages'].append({"role": "assistant", "content": response})
-        cache_response(str(context['messages']), response)
-        logger.debug(f"Response cached for user {user_id}")
-    else:
-        logger.warning(f"Failed to get a valid response for user {user_id}")
-    
-    duration = time.time() - start_time
-    logger.info(f"Total time to get response for user {user_id}: {duration:.3f}s")
-    return response
+    try:
+        timeout = ClientTimeout(total=PERPLEXITY_TIMEOUT)
+        async with session.post(PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
+            elapsed_time = time.time() - start_time
+            logger.info(f"API request completed in {elapsed_time:.2f} seconds")
+            if response.status == 200:
+                return await response.json()
+            else:
+                response_text = await response.text()
+                logger.error(f"API request failed with status {response.status}. Full Response: {response_text}")
+                raise Exception(f"API request failed with status {response.status}: {response_text}")
+    except asyncio.TimeoutError:
+        logger.error(f"Request to Perplexity API timed out after {PERPLEXITY_TIMEOUT} seconds")
+        raise
+    except Exception as e:
+        elapsed_time = time.time() - start_time
+        logger.error(f"API request failed after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
+        raise
 
 async def send_long_message(ctx, message):
-    logger.info(f"Sending long message (length: {len(message)})")
-    max_length = 1900
+    max_length = 1900  # Leaving some buffer for potential formatting
 
-    # Generate a unique identifier for this message
-    message_id = hash(message + str(time.time()))
-    if message_id in sent_messages:
-        logger.warning(f"Duplicate message detected. Skipping send.")
-        return
-
-    sent_messages.add(message_id)
+    # Check if message is a dictionary and extract the content
+    if isinstance(message, dict):
+        message = message.get('choices', [{}])[0].get('message', {}).get('content', '')
+    
+    if not message:
+        return None
 
     if len(message) <= max_length:
         try:
-            await ctx.send(message)
-            logger.debug("Short message sent successfully")
-        except (HTTPException, Forbidden) as e:
-            logger.error(f"Failed to send message: {str(e)}")
-        return
+            return await ctx.send(message)
+        except (HTTPException, Forbidden):
+            return None
 
+    # Split the message into paragraphs
+    paragraphs = re.split(r'\n\s*\n', message)
     parts = []
-    while message:
-        if len(message) <= max_length:
-            parts.append(message)
-            break
-        
-        split_index = max(message.rfind(c, 0, max_length) for c in '.?!')
-        if split_index <= 0:
-            split_index = message.rfind(' ', 0, max_length)
-        if split_index <= 0:
-            split_index = max_length
+    current_part = ""
 
-        parts.append(message[:split_index+1].strip())
-        message = message[split_index+1:].strip()
-    
-    logger.debug(f"Message split into {len(parts)} parts")
-    for part in parts:
+    for paragraph in paragraphs:
+        if len(current_part) + len(paragraph) + 2 <= max_length:  # +2 for newlines
+            current_part += paragraph + "\n\n"
+        else:
+            if current_part:
+                parts.append(current_part.strip())
+            current_part = paragraph + "\n\n"
+
+    if current_part:
+        parts.append(current_part.strip())
+
+    last_sent_message = None
+    for i, part in enumerate(parts):
         try:
-            await ctx.send(part)
-            await asyncio.sleep(1)  # Add a small delay between messages
-        except (HTTPException, Forbidden) as e:
-            logger.error(f"Failed to send message part: {str(e)}")
+            sent_message = await ctx.send(part)
+            if i == len(parts) - 1:  # Last part
+                last_sent_message = sent_message
+        except (HTTPException, Forbidden):
             break
     
-    logger.debug("Long message sent successfully")
-
-    # Remove the message ID after a delay to allow for potential retries
-    asyncio.create_task(remove_sent_message(message_id))
-
-async def remove_sent_message(message_id):
-    await asyncio.sleep(60)  # Wait for 60 seconds
-    sent_messages.discard(message_id)
-
-# Bot Commands
-@bot.event
-async def on_ready():
-    logger.info(f'{bot.user} has connected to Discord!')
-    logger.info(f'Bot is active in {len(bot.guilds)} guilds')
-    logger.info("Bot is ready to receive DMs")
-
-welcomed_users = set()
+    return last_sent_message
 
 @bot.event
 async def on_message(message):
@@ -284,106 +207,23 @@ async def on_message(message):
         return
 
     if isinstance(message.channel, discord.DMChannel):
-        await process_dm(message)
-    else:
-        try:
-            await bot.process_commands(message)
-        except Exception as e:
-            logger.error(f"Error processing command: {str(e)}", exc_info=True)
-
-async def process_dm(message):
-    logger.info(f"Received DM from {message.author} (ID: {message.author.id})")
-    question = message.content.strip()
-    logger.debug(f"DM content: '{question[:50]}...'")
-    
-    if message.author.id not in welcomed_users:
-        if len(question) < 5:
-            logger.info(f"Sending welcome message to new user {message.author} (ID: {message.author.id})")
-            welcome_message = ("Welcome to SecurePath AI! I'm here to answer your DeFi-related questions. "
-                               "Feel free to ask anything about DeFi, crypto, or blockchain technology. "
-                               "What would you like to know?")
-            await message.channel.send(welcome_message)
-            welcomed_users.add(message.author.id)
-            return
-        else:
-            logger.info(f"New user {message.author} (ID: {message.author.id}) sent a valid first message")
-            welcomed_users.add(message.author.id)
-    
-    if len(question) < 5:
-        logger.info(f"Short message received from {message.author} (ID: {message.author.id})")
-        await message.channel.send("Your message was a bit short. Could you please provide more details or ask a specific question about DeFi?")
-        return
-    
-    if len(question) > 500:
-        logger.info(f"Long message received from {message.author} (ID: {message.author.id})")
-        await message.channel.send("That's quite a long message! Could you please shorten it to 500 characters or less? This helps me provide more focused answers.")
-        return
-
-    logger.info(f"Processing valid DM question from {message.author} (ID: {message.author.id})")
-    async with message.channel.typing():
-        try:
-            logger.debug(f"Fetching response for DM question: '{question[:50]}...'")
-            response = await get_perplexity_response_with_retry(question, message.author.id)
-            
-            if response:
-                logger.info(f"Sending DM response to {message.author} (ID: {message.author.id})")
-                await send_long_message(message.channel, response)
-            else:
-                logger.warning(f"No response generated for DM from {message.author} (ID: {message.author.id})")
-                await message.channel.send("I'm sorry, I couldn't generate a response to that. Could you try rephrasing your question?")
-        except Exception as e:
-            logger.error(f"Error processing DM for {message.author} (ID: {message.author.id})", exc_info=True)
-            await message.channel.send("Oops! Something went wrong on my end. Please try asking your question again in a moment.")
+        await process_message(message)
+    elif message.content.startswith('!defi'):
+        await process_message(message)
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def defi(ctx, *, question=None):
-    if ctx.author.id == 804823236222779413:
-        ctx.command.reset_cooldown(ctx)
-
-    logger.info(f"Received defi command from {ctx.author} (ID: {ctx.author.id}) in {'DM' if isinstance(ctx.channel, discord.DMChannel) else 'server'}")
-    
     if not question:
         await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
         return
 
-    logger.info(f"Question: {question}")
-    
-    if len(question) < 5:
-        await ctx.send("Please provide a more detailed question (at least 5 characters).")
-        return
-    if len(question) > 500:
-        await ctx.send("Your question is too long. Please limit it to 500 characters.")
-        return
-    
-    async with ctx.typing():
-        try:
-            response = await get_perplexity_response_with_retry(question, ctx.author.id)
-            
-            if response:
-                logger.info(f"Sending response to {ctx.author} (ID: {ctx.author.id})")
-                await send_long_message(ctx, response)
-            else:
-                logger.warning(f"No response generated for {ctx.author} (ID: {ctx.author.id})")
-                await ctx.send("I'm sorry, I couldn't generate a response. Please try rephrasing your question.")
-        except Exception as e:
-            logger.error(f"Error in defi command for {ctx.author} (ID: {ctx.author.id})", exc_info=True)
-            await ctx.send("An unexpected error occurred. Our team has been notified.")
-
-@bot.command(name='clear_context')
-async def clear_context(ctx):
-    user_id = ctx.author.id
-    if user_id in user_contexts:
-        del user_contexts[user_id]
-        await ctx.send("Your conversation context has been cleared.")
-    else:
-        await ctx.send("You don't have any active context to clear.")
+    await process_message(ctx, question=question)
 
 @bot.event
 async def on_command_error(ctx, error):
     if isinstance(error, commands.CommandOnCooldown):
         if ctx.author.id != 804823236222779413:
-            logger.info(f"Cooldown triggered for {ctx.author} (ID: {ctx.author.id})")
             await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
     elif isinstance(error, commands.CommandInvokeError):
         logger.error(f"Command invoke error for {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
@@ -392,64 +232,117 @@ async def on_command_error(ctx, error):
         logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-# Web Server
-async def create_web_server():
-    app = web.Application()
-    
-    # Setup session middleware
-    fernet_key = fernet.Fernet.generate_key()
-    secret_key = base64.urlsafe_b64decode(fernet_key)
-    setup_session(app, EncryptedCookieStorage(secret_key))
-    
-    app.router.add_get('/', lambda request: web.Response(text="Bot is running!"))
-    return app
+# Bot Commands
+@bot.event
+async def on_ready():
+    logger.info(f'{bot.user} has connected to Discord!')
+    logger.info(f'Bot is active in {len(bot.guilds)} guilds')
+    logger.info("Bot is ready to receive DMs")
 
-# Add startup and shutdown processes
-async def startup():
-    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
-    # Add any additional startup tasks here
+async def process_message(message, question=None):
+    if not question:
+        question = message.content.strip()
+        if not isinstance(message.channel, discord.DMChannel):
+            question = question[6:].strip()  # Remove '!defi ' from the start
 
-async def shutdown():
+    logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
+
+    if len(question) < 5:
+        await message.channel.send("Please provide a more detailed question (at least 5 characters).")
+        return
+    if len(question) > 500:
+        await message.channel.send("Your question is too long. Please limit it to 500 characters.")
+        return
+
+    async with message.channel.typing():
+        try:
+            update_user_context(message.author.id, question)
+            
+            response = await fetch_perplexity_response(message.author.id, question)
+            if response and 'choices' in response:
+                answer = response['choices'][0]['message']['content']
+                update_user_context(message.author.id, answer, is_bot_response=True)
+                await send_long_message(message.channel, answer)
+            else:
+                await message.channel.send("I'm sorry, I couldn't get a response. Please try again later.")
+        except Exception as e:
+            logger.error(f"Error processing message: {str(e)}", exc_info=True)
+            await message.channel.send("An unexpected error occurred. Please try again later.")
+
+def quiet_exit():
+    """Exit the program quietly without showing any tracebacks."""
+    console.print("Bot has been shut down.")
+    sys.exit(0)
+
+async def force_shutdown():
+    """Force shutdown of all tasks."""
     console.print(Panel.fit("Shutting down SecurePath AI Bot", border_style="red"))
-    # Add any additional cleanup tasks here
-
-# Modify the start_bot function
-async def start_bot():
-    try:
-        await startup()
-        web_app = await create_web_server()
-        runner = web.AppRunner(web_app)
-        await runner.setup()
-        port = int(os.environ.get('PORT', 10000))
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        
-        await asyncio.gather(
-            site.start(),
-            bot.start(DISCORD_TOKEN)
-        )
-    except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt. Shutting down...")
-    finally:
-        await shutdown()
+    
+    loop = asyncio.get_event_loop()
+    for task in asyncio.all_tasks(loop=loop):
+        if task is not asyncio.current_task():
+            task.cancel()
+    
+    await asyncio.sleep(0.1)  # Give tasks a moment to cancel
+    
+    global session, conn, bot
+    if session:
+        await session.close()
+    if conn:
+        await conn.close()
+    if bot:
         await bot.close()
-        await runner.cleanup()
-        logger.info("Bot has been shut down.")
+    
+    loop.stop()
+
+def handle_exit():
+    asyncio.create_task(force_shutdown())
+    # Set a timeout for the shutdown process
+    asyncio.get_event_loop().call_later(2, quiet_exit)
+
+async def startup():
+    global conn, session
+    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
+    logger.info("Bot startup initiated")
+    
+    # Initialize the connection and session
+    conn = TCPConnector(limit=10)  # Adjust the limit as needed
+    session = ClientSession(connector=conn)
+    
+    logger.info("Bot startup completed")
+
+async def start_bot():
+    global bot, session, conn
+    try:
+        logger.info("Setting up signal handlers")
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
+
+        logger.info("Calling startup function")
+        await startup()
+        
+        logger.info("Starting bot")
+        await bot.start(DISCORD_TOKEN)
+        
+    except asyncio.CancelledError:
+        logger.info("Bot startup cancelled")
+    except Exception as e:
+        logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
+    finally:
+        logger.info("Bot startup process completed")
+        if session:
+            await session.close()
+        if conn:
+            await conn.close()
 
 if __name__ == "__main__":
     try:
         asyncio.run(start_bot())
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt. Exiting...")
+        logger.info("Received keyboard interrupt")
     except Exception as e:
-        logger.critical(f"Critical error occurred: {type(e).__name__}: {str(e)}", exc_info=True)
+        logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}")
+        logger.error(traceback.format_exc())
     finally:
-        logger.info("Bot script has ended.")
-        # Ensure all log messages are written
-        for handler in logger.handlers:
-            handler.close()
-            logger.removeHandler(handler)
-        # Clear any remaining tasks
-        pending = asyncio.all_tasks()
-        for task in pending:
-            task.cancel()
-        asyncio.get_event_loop().run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        logger.info("Bot shutting down")
+        quiet_exit()
