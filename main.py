@@ -5,7 +5,7 @@ from logging.handlers import RotatingFileHandler
 import time
 from asyncio import Lock
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 import signal
 import sys
 import traceback
@@ -212,16 +212,29 @@ async def send_long_message(ctx, message):
 async def log_to_channel(message_content, user, is_dm=False, is_response=False):
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
-        logger.error(f"Could not find log channel with ID {LOG_CHANNEL_ID}")
-        return
+        logger.warning(f"Could not find log channel with ID {LOG_CHANNEL_ID}. Attempting to fetch...")
+        try:
+            channel = await bot.fetch_channel(LOG_CHANNEL_ID)
+        except discord.errors.NotFound:
+            logger.error(f"Log channel with ID {LOG_CHANNEL_ID} does not exist.")
+            return
+        except discord.errors.Forbidden:
+            logger.error(f"Bot does not have permission to access channel with ID {LOG_CHANNEL_ID}.")
+            return
+        except Exception as e:
+            logger.error(f"Error fetching log channel: {str(e)}")
+            return
 
     embed = Embed(description=message_content, color=0x00ff00 if is_response else 0x0000ff)
     embed.set_author(name=f"{user.name}#{user.discriminator}", icon_url=user.avatar.url if user.avatar else None)
     embed.add_field(name="Type", value="DM" if is_dm else "Server (!defi)")
     embed.add_field(name="User ID", value=user.id)
-    embed.timestamp = datetime.utcnow()
+    embed.timestamp = datetime.now(timezone.utc)
 
-    await channel.send(embed=embed)
+    try:
+        await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Failed to send message to log channel: {str(e)}")
 
 async def send_stats():
     channel = bot.get_channel(LOG_CHANNEL_ID)
@@ -234,7 +247,7 @@ async def send_stats():
     embed.add_field(name="Unique Users", value=len(message_counter))
     embed.add_field(name="Top 5 Users", value="\n".join(f"{user}: {count}" for user, count in message_counter.most_common(5)))
     embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()))
-    embed.timestamp = datetime.utcnow()
+    embed.timestamp = datetime.now(timezone.utc)
 
     await channel.send(embed=embed)
 
@@ -284,6 +297,10 @@ async def on_ready():
     logger.info(f'{bot.user} has connected to Discord!')
     logger.info(f'Bot is active in {len(bot.guilds)} guilds')
     logger.info("Bot is ready to receive DMs")
+    
+    # Wait a short time to ensure all channels are cached
+    await asyncio.sleep(2)
+    
     await send_stats()  # Send initial stats when bot is ready
 
 async def process_message(message, question=None):
