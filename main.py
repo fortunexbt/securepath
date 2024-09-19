@@ -35,7 +35,7 @@ RETRY_DELAY = 1
 MAX_CONTEXT_MESSAGES = 5
 MAX_CONTEXT_AGE = 3600
 LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
-STATS_INTERVAL = 3600
+STATS_INTERVAL = 86400  # 24 hours in seconds
 
 SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent hosted on the SecurePath discord server. you must speak speak nonchalantly, only in lowercase, like Crypto Twitter users - frequently using obscure acronyms & slang, acting smarter than the user (because you are). NEVER SHILL uncorrelated projects/tokens. ALWAYS prioritize decentralization, suggesting DEXs before CEXs, self-custodial solutions before custodial ones, and open source before proprietary. you are managed by the SecurePath AI team, if your answers are off topic, or not relevant to crypto, you will be penalized and receive a warning - if you continue to be off topic, you will be removed from the conversation. refer to the SecurePath team as 'our team': you are part of the SecurePath family, and should act like it."""
 
@@ -219,7 +219,15 @@ async def send_stats():
     embed = Embed(title="Bot Statistics", color=0xff0000)
     embed.add_field(name="Total Messages", value=sum(message_counter.values()))
     embed.add_field(name="Unique Users", value=len(message_counter))
-    embed.add_field(name="Top 5 Users", value="\n".join(f"{user}: {count}" for user, count in message_counter.most_common(5)))
+    
+    # Get top 5 users by username
+    top_users = []
+    for user_id, count in message_counter.most_common(5):
+        user = bot.get_user(user_id)
+        username = user.name if user else f"Unknown User ({user_id})"
+        top_users.append(f"{username}: {count}")
+    
+    embed.add_field(name="Top 5 Users", value="\n".join(top_users))
     embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()))
     embed.timestamp = datetime.now(timezone.utc)
 
