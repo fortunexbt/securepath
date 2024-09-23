@@ -358,7 +358,13 @@ def quiet_exit() -> None:
     logging.shutdown()
     sys.exit(0)
 
-@backoff.on_exception(backoff.expo, discord.errors.HTTPException, max_tries=5)
+INITIAL_RETRY_DELAY = 5  # seconds
+MAX_RETRY_DELAY = 300  # 5 minutes
+
+@backoff.on_exception(backoff.expo, 
+                      HTTPException, 
+                      max_time=3600,  # 1 hour max retry time
+                      giveup=lambda e: e.status != 429)  # Only retry on rate limit errors
 async def start_bot() -> None:
     try:
         logger.info("Setting up signal handlers")
@@ -371,14 +377,7 @@ async def start_bot() -> None:
         app = web.Application()
         app.router.add_get("/", lambda request: web.Response(text="Bot is running"))
         
-        class CustomAccessLogger(AccessLogger):
-            def log(self, request, response, time):
-                if request.method == "GET" and request.path == "/" and response.status == 200:
-                    logger.info(f"Health check request received: {request.method} {request.path}")
-                    return
-                super().log(request, response, time)
-
-        runner = web.AppRunner(app, access_log_class=CustomAccessLogger)
+        runner = web.AppRunner(app)
         await runner.setup()
         port = int(os.getenv('PORT', 10000))
         site = web.TCPSite(runner, '0.0.0.0', port)
@@ -389,15 +388,17 @@ async def start_bot() -> None:
         logger.info("Starting bot")
         await bot.start(DISCORD_TOKEN)
         
-    except asyncio.CancelledError:
-        logger.info("Bot startup cancelled")
-    except discord.errors.HTTPException as e:
+    except HTTPException as e:
         if e.status == 429:
-            logger.warning(f"Rate limited. Retrying in {e.retry_after} seconds.")
-            await asyncio.sleep(e.retry_after)
+            retry_after = e.response.headers.get('Retry-After', INITIAL_RETRY_DELAY)
+            retry_after = min(int(retry_after), MAX_RETRY_DELAY)
+            logger.warning(f"Rate limited. Retrying in {retry_after} seconds.")
+            await asyncio.sleep(retry_after)
             raise  # This will trigger the backoff retry
         else:
             logger.error(f"HTTP Exception: {e}")
+    except asyncio.CancelledError:
+        logger.info("Bot startup cancelled")
     except Exception as e:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
     finally:
