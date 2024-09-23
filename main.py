@@ -3,14 +3,13 @@ import os
 import logging
 from logging.handlers import RotatingFileHandler
 import time
-from asyncio import Lock
 import json
 from datetime import datetime, timezone
 import signal
 import sys
 import traceback
-from collections import deque
-import re
+from collections import deque, Counter, defaultdict
+from typing import Optional, Dict, Any, List
 
 import aiohttp
 from aiohttp import web, ClientSession, TCPConnector, ClientTimeout
@@ -20,10 +19,9 @@ from rich.console import Console
 from rich.panel import Panel
 import discord
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
 from discord.errors import HTTPException, Forbidden
 from discord import Embed
-from collections import Counter
+from dotenv import load_dotenv
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
@@ -37,9 +35,24 @@ MAX_CONTEXT_AGE = 3600
 LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
 STATS_INTERVAL = 86400
 
+API_RATE_LIMIT_INTERVAL = 60  # seconds
+API_RATE_LIMIT_MAX = 10  # max messages per interval
+
 SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent hosted on the SecurePath discord server. you must speak speak nonchalantly, only in lowercase, like Crypto Twitter users - frequently using obscure acronyms & slang, acting smarter than the user (because you are). NEVER SHILL uncorrelated projects/tokens. ALWAYS prioritize decentralization, suggesting DEXs before CEXs, self-custodial solutions before custodial ones, and open source before proprietary. you are managed by the SecurePath AI team, if your answers are off topic, or not relevant to crypto, you will be penalized and receive a warning - if you continue to be off topic, you will be removed from the conversation. refer to the SecurePath team as 'our team': you are part of the SecurePath family, and should act like it."""
 
-def setup_logging():
+logger = None
+console = Console()
+conn = None
+session = None
+intents = discord.Intents.default()
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+user_contexts: Dict[int, deque] = {}
+message_counter = Counter()
+command_counter = Counter()
+api_rate_limits = defaultdict(lambda: 0)
+
+def setup_logging() -> logging.Logger:
     log_directory = "logs"
     os.makedirs(log_directory, exist_ok=True)
     log_file = os.path.join(log_directory, "bot.log")
@@ -63,21 +76,11 @@ def setup_logging():
     return logger
 
 logger = setup_logging()
-console = Console()
 
-conn = None
-session = None
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
-user_contexts = {}
-message_counter = Counter()
-command_counter = Counter()
-
-def get_user_context(user_id):
+def get_user_context(user_id: int) -> deque:
     return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
 
-def update_user_context(user_id, message_content, is_bot_response=False):
+def update_user_context(user_id: int, message_content: str, is_bot_response: bool = False) -> None:
     context = get_user_context(user_id)
     current_time = time.time()
     
@@ -95,7 +98,7 @@ def update_user_context(user_id, message_content, is_bot_response=False):
                     maxlen=MAX_CONTEXT_MESSAGES)
     user_contexts[user_id] = context
 
-def get_context_messages(user_id):
+def get_context_messages(user_id: int) -> List[Dict[str, str]]:
     context = get_user_context(user_id)
     messages = []
     last_role = None
@@ -107,7 +110,7 @@ def get_context_messages(user_id):
             messages[-1]['content'] += f"\n{msg['content']}"
     return messages
 
-async def fetch_perplexity_response(user_id, new_message):
+async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[Dict[str, Any]]:
     if session is None:
         logger.error("Session is not initialized")
         return None
@@ -157,7 +160,7 @@ async def fetch_perplexity_response(user_id, new_message):
         logger.error(f"API request failed after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
         raise
 
-async def send_long_message(ctx, message):
+async def send_long_message(ctx: commands.Context, message: str) -> Optional[discord.Message]:
     max_length = 4096
 
     if isinstance(message, dict):
@@ -183,7 +186,7 @@ async def send_long_message(ctx, message):
     
     return last_sent_message
 
-async def send_stats():
+async def send_stats() -> None:
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
         logger.error(f"Could not find log channel with ID {LOG_CHANNEL_ID}")
@@ -210,20 +213,37 @@ async def send_stats():
         logger.error(f"Failed to send message to log channel: {str(e)}")
 
 @tasks.loop(seconds=STATS_INTERVAL)
-async def send_periodic_stats():
+async def send_periodic_stats() -> None:
     await send_stats()
 
 @bot.event
-async def on_ready():
+async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
     logger.info(f'Bot is active in {len(bot.guilds)} guilds')
     logger.info("Bot is ready to receive DMs")
     
     await asyncio.sleep(2)
     
+    # Ensure the bot has fully cached the guilds and channels
+    for guild in bot.guilds:
+        await bot.fetch_guild(guild.id)
+    
+    # Call the new function to send initial stats after ensuring the bot is fully ready
+    asyncio.create_task(send_initial_stats())
+
+async def send_initial_stats() -> None:
+    await asyncio.sleep(5)  # Additional delay to ensure the bot has time to cache the log channel
     await send_stats()
 
-async def process_message(message, question=None):
+async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
+    current_time = time.time()
+    if api_rate_limits[message.author.id] >= API_RATE_LIMIT_MAX:
+        await message.channel.send("You are sending messages too quickly. Please slow down.")
+        return
+
+    api_rate_limits[message.author.id] += 1
+    asyncio.create_task(reset_api_rate_limit(message.author.id))
+
     if not question:
         question = message.content.strip()
         if not isinstance(message.channel, discord.DMChannel):
@@ -247,6 +267,12 @@ async def process_message(message, question=None):
                 answer = response['choices'][0]['message']['content']
                 update_user_context(message.author.id, answer, is_bot_response=True)
                 await send_long_message(message.channel, answer)
+                
+                # Log the received and sent messages
+                log_channel = bot.get_channel(LOG_CHANNEL_ID)
+                if log_channel:
+                    await log_channel.send(f"Received message from {message.author} (ID: {message.author.id}): {question}")
+                    await log_channel.send(f"Sent response to {message.author} (ID: {message.author.id}): {answer}")
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
                 await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
@@ -255,8 +281,12 @@ async def process_message(message, question=None):
             error_message = "An unexpected error occurred. Please try again later."
             await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
 
+async def reset_api_rate_limit(user_id: int) -> None:
+    await asyncio.sleep(API_RATE_LIMIT_INTERVAL)
+    api_rate_limits[user_id] = 0
+
 @bot.event
-async def on_message(message):
+async def on_message(message: discord.Message) -> None:
     if message.author == bot.user:
         return
 
@@ -270,7 +300,7 @@ async def on_message(message):
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
-async def defi(ctx, *, question=None):
+async def defi(ctx: commands.Context, *, question: Optional[str] = None) -> None:
     if not question:
         await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
         return
@@ -278,7 +308,7 @@ async def defi(ctx, *, question=None):
     await process_message(ctx, question=question)
 
 @bot.event
-async def on_command_error(ctx, error):
+async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
     if isinstance(error, commands.CommandOnCooldown):
         if ctx.author.id != 804823236222779413:
             await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
@@ -289,12 +319,12 @@ async def on_command_error(ctx, error):
         logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-def quiet_exit():
+def quiet_exit() -> None:
     """Exit the program quietly without showing any tracebacks."""
     console.print("Bot has been shut down.")
     sys.exit(0)
 
-async def force_shutdown():
+async def force_shutdown() -> None:
     """Force shutdown of all tasks."""
     console.print(Panel.fit("Shutting down SecurePath AI Bot", border_style="red"))
     
@@ -305,7 +335,6 @@ async def force_shutdown():
     
     await asyncio.sleep(0.1)
     
-    global session, conn, bot
     if session:
         await session.close()
     if conn:
@@ -315,11 +344,11 @@ async def force_shutdown():
     
     loop.stop()
 
-def handle_exit():
+def handle_exit() -> None:
     asyncio.create_task(force_shutdown())
     asyncio.get_event_loop().call_later(2, quiet_exit)
 
-async def startup():
+async def startup() -> None:
     global conn, session
     console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
     logger.info("Bot startup initiated")
@@ -331,8 +360,7 @@ async def startup():
     
     logger.info("Bot startup completed")
 
-async def start_bot():
-    global bot, session, conn
+async def start_bot() -> None:
     try:
         logger.info("Setting up signal handlers")
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -347,12 +375,13 @@ async def start_bot():
         class CustomAccessLogger(AccessLogger):
             def log(self, request, response, time):
                 if request.method == "GET" and request.path == "/" and response.status == 200:
+                    logger.info(f"Health check request received: {request.method} {request.path}")
                     return
                 super().log(request, response, time)
 
         runner = web.AppRunner(app, access_log_class=CustomAccessLogger)
         await runner.setup()
-        port = int(os.environ.get('PORT', 10000))
+        port = int(os.getenv('PORT', 10000))
         site = web.TCPSite(runner, '0.0.0.0', port)
         await site.start()
         
