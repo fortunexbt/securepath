@@ -22,6 +22,7 @@ from discord.ext import commands, tasks
 from discord.errors import HTTPException, Forbidden
 from discord import Embed
 from dotenv import load_dotenv
+import backoff
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
@@ -218,18 +219,26 @@ async def send_periodic_stats() -> None:
 
 @bot.event
 async def on_ready() -> None:
-    logger.info(f'{bot.user} has connected to Discord!')
-    logger.info(f'Bot is active in {len(bot.guilds)} guilds')
-    logger.info("Bot is ready to receive DMs")
-    
-    await asyncio.sleep(2)
-    
-    # Ensure the bot has fully cached the guilds and channels
-    for guild in bot.guilds:
-        await bot.fetch_guild(guild.id)
-    
-    # Call the new function to send initial stats after ensuring the bot is fully ready
-    asyncio.create_task(send_initial_stats())
+    try:
+        logger.info(f'{bot.user} has connected to Discord!')
+        logger.info(f'Bot is active in {len(bot.guilds)} guilds')
+        logger.info("Bot is ready to receive DMs")
+        
+        await asyncio.sleep(2)
+        
+        # Ensure the bot has fully cached the guilds and channels
+        for guild in bot.guilds:
+            try:
+                await bot.fetch_guild(guild.id)
+            except discord.errors.Forbidden:
+                logger.warning(f"Bot doesn't have access to guild {guild.id}")
+            except discord.errors.HTTPException as e:
+                logger.error(f"HTTP error fetching guild {guild.id}: {e}")
+        
+        # Call the new function to send initial stats after ensuring the bot is fully ready
+        asyncio.create_task(send_initial_stats())
+    except Exception as e:
+        logger.error(f"Error in on_ready event: {type(e).__name__}: {str(e)}")
 
 async def send_initial_stats() -> None:
     await asyncio.sleep(5)  # Additional delay to ensure the bot has time to cache the log channel
@@ -319,11 +328,6 @@ async def on_command_error(ctx: commands.Context, error: commands.CommandError) 
         logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-def quiet_exit() -> None:
-    """Exit the program quietly without showing any tracebacks."""
-    console.print("Bot has been shut down.")
-    sys.exit(0)
-
 async def force_shutdown() -> None:
     """Force shutdown of all tasks."""
     console.print(Panel.fit("Shutting down SecurePath AI Bot", border_style="red"))
@@ -348,18 +352,13 @@ def handle_exit() -> None:
     asyncio.create_task(force_shutdown())
     asyncio.get_event_loop().call_later(2, quiet_exit)
 
-async def startup() -> None:
-    global conn, session
-    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
-    logger.info("Bot startup initiated")
-    
-    conn = TCPConnector(limit=10)
-    session = ClientSession(connector=conn)
-    
-    send_periodic_stats.start()
-    
-    logger.info("Bot startup completed")
+def quiet_exit() -> None:
+    """Exit the program quietly without showing any tracebacks."""
+    console.print("Bot has been shut down.")
+    logging.shutdown()
+    sys.exit(0)
 
+@backoff.on_exception(backoff.expo, discord.errors.HTTPException, max_tries=5)
 async def start_bot() -> None:
     try:
         logger.info("Setting up signal handlers")
@@ -392,6 +391,13 @@ async def start_bot() -> None:
         
     except asyncio.CancelledError:
         logger.info("Bot startup cancelled")
+    except discord.errors.HTTPException as e:
+        if e.status == 429:
+            logger.warning(f"Rate limited. Retrying in {e.retry_after} seconds.")
+            await asyncio.sleep(e.retry_after)
+            raise  # This will trigger the backoff retry
+        else:
+            logger.error(f"HTTP Exception: {e}")
     except Exception as e:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
     finally:
@@ -402,6 +408,18 @@ async def start_bot() -> None:
             await conn.close()
         if 'runner' in locals():
             await runner.cleanup()
+
+async def startup() -> None:
+    global conn, session
+    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
+    logger.info("Bot startup initiated")
+    
+    conn = TCPConnector(limit=10)
+    session = ClientSession(connector=conn)
+    
+    send_periodic_stats.start()
+    
+    logger.info("Bot startup completed")
 
 if __name__ == "__main__":
     try:
