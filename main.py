@@ -35,7 +35,7 @@ RETRY_DELAY = 1
 MAX_CONTEXT_MESSAGES = 5
 MAX_CONTEXT_AGE = 3600
 LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
-STATS_INTERVAL = 86400  # 24 hours in seconds
+STATS_INTERVAL = 86400
 
 SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent hosted on the SecurePath discord server. you must speak speak nonchalantly, only in lowercase, like Crypto Twitter users - frequently using obscure acronyms & slang, acting smarter than the user (because you are). NEVER SHILL uncorrelated projects/tokens. ALWAYS prioritize decentralization, suggesting DEXs before CEXs, self-custodial solutions before custodial ones, and open source before proprietary. you are managed by the SecurePath AI team, if your answers are off topic, or not relevant to crypto, you will be penalized and receive a warning - if you continue to be off topic, you will be removed from the conversation. refer to the SecurePath team as 'our team': you are part of the SecurePath family, and should act like it."""
 
@@ -183,33 +183,6 @@ async def send_long_message(ctx, message):
     
     return last_sent_message
 
-async def log_to_channel(message_content, user, is_dm=False, is_response=False):
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if not channel:
-        logger.warning(f"Could not find log channel with ID {LOG_CHANNEL_ID}. Attempting to fetch...")
-        try:
-            channel = await bot.fetch_channel(LOG_CHANNEL_ID)
-        except discord.errors.NotFound:
-            logger.error(f"Log channel with ID {LOG_CHANNEL_ID} does not exist.")
-            return
-        except discord.errors.Forbidden:
-            logger.error(f"Bot does not have permission to access channel with ID {LOG_CHANNEL_ID}.")
-            return
-        except Exception as e:
-            logger.error(f"Error fetching log channel: {str(e)}")
-            return
-
-    embed = Embed(description=message_content, color=0x004200 if is_response else 0x0000ff)
-    embed.set_author(name=f"{user.name}#{user.discriminator}", icon_url=user.avatar.url if user.avatar else None)
-    embed.add_field(name="Type", value="DM" if is_dm else "Server (!defi)")
-    embed.add_field(name="User ID", value=user.id)
-    embed.timestamp = datetime.now(timezone.utc)
-
-    try:
-        await channel.send(embed=embed)
-    except Exception as e:
-        logger.error(f"Failed to send message to log channel: {str(e)}")
-
 async def send_stats():
     channel = bot.get_channel(LOG_CHANNEL_ID)
     if not channel:
@@ -231,7 +204,10 @@ async def send_stats():
     embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()))
     embed.timestamp = datetime.now(timezone.utc)
 
-    await channel.send(embed=embed)
+    try:
+        await channel.send(embed=embed)
+    except Exception as e:
+        logger.error(f"Failed to send message to log channel: {str(e)}")
 
 @tasks.loop(seconds=STATS_INTERVAL)
 async def send_periodic_stats():
@@ -270,16 +246,13 @@ async def process_message(message, question=None):
             if response and 'choices' in response:
                 answer = response['choices'][0]['message']['content']
                 update_user_context(message.author.id, answer, is_bot_response=True)
-                await log_to_channel(answer, bot.user, is_response=True)
                 await send_long_message(message.channel, answer)
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
-                await log_to_channel(error_message, bot.user, is_response=True)
                 await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
         except Exception as e:
             logger.error(f"Error processing message: {str(e)}", exc_info=True)
             error_message = "An unexpected error occurred. Please try again later."
-            await log_to_channel(error_message, bot.user, is_response=True)
             await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
 
 @bot.event
@@ -288,11 +261,9 @@ async def on_message(message):
         return
 
     if isinstance(message.channel, discord.DMChannel):
-        await log_to_channel(message.content, message.author, is_dm=True)
         message_counter[message.author.id] += 1
         await process_message(message)
     elif message.content.startswith('!defi'):
-        await log_to_channel(message.content, message.author)
         message_counter[message.author.id] += 1
         command_counter['!defi'] += 1
         await process_message(message)
