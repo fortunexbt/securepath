@@ -366,6 +366,9 @@ MAX_RETRY_DELAY = 300  # 5 minutes
                       max_time=3600,  # 1 hour max retry time
                       giveup=lambda e: e.status != 429)  # Only retry on rate limit errors
 async def start_bot() -> None:
+    initial_delay = 60  # 1 minute
+    logger.info(f"Waiting {initial_delay} seconds before starting...")
+    await asyncio.sleep(initial_delay)
     try:
         logger.info("Setting up signal handlers")
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -390,6 +393,8 @@ async def start_bot() -> None:
         
     except HTTPException as e:
         if e.status == 429:
+            logger.error(f"Full rate limit response: {e.response.headers}")
+            logger.error(f"Response body: {await e.response.text()}")
             retry_after = e.response.headers.get('Retry-After', INITIAL_RETRY_DELAY)
             retry_after = min(int(retry_after), MAX_RETRY_DELAY)
             logger.warning(f"Rate limited. Retrying in {retry_after} seconds.")
