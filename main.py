@@ -324,7 +324,7 @@ async def process_message(message: discord.Message, question: Optional[str] = No
                     
                     await log_channel.send(embed=incoming_embed)
 
-                    # Create an embed for the outgoing message
+                    # Create an embed for the outgoing message (partial response)
                     outgoing_embed = discord.Embed(
                         title="Outgoing Message",
                         description=answer[:1024],  # Discord has a 1024 character limit for embed description
@@ -333,16 +333,9 @@ async def process_message(message: discord.Message, question: Optional[str] = No
                     )
                     outgoing_embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
                     outgoing_embed.add_field(name="Recipient", value=f"{message.author.name} (ID: {message.author.id})", inline=False)
+                    outgoing_embed.set_footer(text="This is a partial response. Full response sent to user.")
                     
                     await log_channel.send(embed=outgoing_embed)
-
-                    # Send full response in chunks if it's longer than 2000 characters
-                    if len(answer) > 2000:
-                        chunks = [answer[i:i+1990] for i in range(0, len(answer), 1990)]
-                        for i, chunk in enumerate(chunks):
-                            await log_channel.send(f"Full response part {i+1}/{len(chunks)}:\n\n{chunk}")
-                    else:
-                        await log_channel.send(f"Full response to {message.author.name} (ID: {message.author.id}):\n\n{answer}")
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
                 await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
