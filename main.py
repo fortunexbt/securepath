@@ -1,50 +1,54 @@
 import asyncio
+import json
 import os
 import logging
-from logging.handlers import RotatingFileHandler
 import time
-import json
 from datetime import datetime, timezone
 import signal
 import sys
 import traceback
 from collections import deque, Counter, defaultdict
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 
 import aiohttp
-from aiohttp import web, ClientSession, TCPConnector, ClientTimeout
-from aiohttp.web_log import AccessLogger
+from aiohttp import ClientSession, TCPConnector, ClientTimeout
 from rich.logging import RichHandler
 from rich.console import Console
 from rich.panel import Panel
 import discord
 from discord.ext import commands, tasks
-from discord.errors import HTTPException, Forbidden
 from discord import Embed
 from dotenv import load_dotenv
-import backoff
 
-load_dotenv()
-DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
-PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
-PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', "https://api.perplexity.ai/chat/completions")
-PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 60))
-MAX_RETRIES = 2
-RETRY_DELAY = 1
-MAX_CONTEXT_MESSAGES = 5
-MAX_CONTEXT_AGE = 3600
-LOG_CHANNEL_ID = int(os.getenv('LOG_CHANNEL_ID'))
-STATS_INTERVAL = 86400
+# Load configuration
+from config import (
+    DISCORD_TOKEN, PERPLEXITY_API_KEY, LOG_CHANNEL_ID, PERPLEXITY_API_URL,
+    PERPLEXITY_TIMEOUT, MAX_RETRIES, RETRY_DELAY, MAX_CONTEXT_MESSAGES,
+    MAX_CONTEXT_AGE, STATS_INTERVAL, API_RATE_LIMIT_INTERVAL, API_RATE_LIMIT_MAX,
+    SYSTEM_PROMPT, LOG_FORMAT, LOG_LEVEL
+)
 
-API_RATE_LIMIT_INTERVAL = 60  # seconds
-API_RATE_LIMIT_MAX = 10  # max messages per interval
+def setup_logging() -> logging.Logger:
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
 
-SYSTEM_PROMPT = """you're a superintelligent degen DeFi agent hosted on the SecurePath discord server. you must speak speak nonchalantly, only in lowercase, like Crypto Twitter users - frequently using obscure acronyms & slang, acting smarter than the user (because you are). NEVER SHILL uncorrelated projects/tokens. ALWAYS prioritize decentralization, suggesting DEXs before CEXs, self-custodial solutions before custodial ones, and open source before proprietary. you are managed by the SecurePath AI team, if your answers are off topic, or not relevant to crypto, you will be penalized and receive a warning - if you continue to be off topic, you will be removed from the conversation. refer to the SecurePath team as 'our team': you are part of the SecurePath family, and should act like it."""
+    # Console handler with RichHandler
+    console_handler = RichHandler(rich_tracebacks=True)
+    console_handler.setLevel(getattr(logging, LOG_LEVEL))
+    console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    logger.addHandler(console_handler)
 
-logger = None
+    # Set Discord-related loggers to WARNING
+    for module in ['discord', 'discord.http', 'discord.gateway']:
+        logging.getLogger(module).setLevel(logging.WARNING)
+
+    return logger
+
+logger = setup_logging()
+
 console = Console()
-conn = None
-session = None
+conn: Optional[TCPConnector] = None
+session: Optional[ClientSession] = None
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -52,31 +56,6 @@ user_contexts: Dict[int, deque] = {}
 message_counter = Counter()
 command_counter = Counter()
 api_rate_limits = defaultdict(lambda: 0)
-
-def setup_logging() -> logging.Logger:
-    log_directory = "logs"
-    os.makedirs(log_directory, exist_ok=True)
-    log_file = os.path.join(log_directory, "bot.log")
-
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
-
-    console_handler = RichHandler(rich_tracebacks=True)
-    console_handler.setLevel(logging.INFO)
-    logger.addHandler(console_handler)
-
-    file_handler = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=5)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s:%(lineno)d - %(message)s'))
-    file_handler.setLevel(logging.DEBUG)
-    logger.addHandler(file_handler)
-
-    logging.getLogger('discord').setLevel(logging.WARNING)
-    logging.getLogger('discord.http').setLevel(logging.WARNING)
-    logging.getLogger('discord.gateway').setLevel(logging.WARNING)
-
-    return logger
-
-logger = setup_logging()
 
 def get_user_context(user_id: int) -> deque:
     return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
@@ -182,36 +161,44 @@ async def send_long_message(ctx: commands.Context, message: str) -> Optional[dis
             sent_message = await ctx.send(embed=embed)
             if i == len(message_parts) - 1:
                 last_sent_message = sent_message
-        except (HTTPException, Forbidden):
+        except discord.errors.HTTPException as e:
+            logger.error(f"Failed to send message: {str(e)}")
             break
     
     return last_sent_message
 
 async def send_stats() -> None:
-    channel = bot.get_channel(LOG_CHANNEL_ID)
-    if not channel:
-        logger.error(f"Could not find log channel with ID {LOG_CHANNEL_ID}")
+    if not LOG_CHANNEL_ID:
+        logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
         return
 
-    embed = Embed(title="Bot Statistics", color=0xff0000)
-    embed.add_field(name="Total Messages", value=sum(message_counter.values()))
-    embed.add_field(name="Unique Users", value=len(message_counter))
-    
-    # Get top 5 users by username
-    top_users = []
-    for user_id, count in message_counter.most_common(5):
-        user = bot.get_user(user_id)
-        username = user.name if user else f"Unknown User ({user_id})"
-        top_users.append(f"{username}: {count}")
-    
-    embed.add_field(name="Top 5 Users", value="\n".join(top_users))
-    embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()))
-    embed.timestamp = datetime.now(timezone.utc)
-
     try:
+        log_channel_id = int(LOG_CHANNEL_ID)
+        channel = bot.get_channel(log_channel_id)
+        if not channel:
+            logger.debug(f"Could not find log channel with ID {log_channel_id}")
+            return
+
+        embed = Embed(title="Bot Statistics", color=0xff0000)
+        embed.add_field(name="Total Messages", value=sum(message_counter.values()))
+        embed.add_field(name="Unique Users", value=len(message_counter))
+        
+        top_users = []
+        for user_id, count in message_counter.most_common(5):
+            user = bot.get_user(user_id)
+            username = user.name if user else f"Unknown User ({user_id})"
+            top_users.append(f"{username}: {count}")
+        
+        embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet")
+        embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()) or "No commands used yet")
+        embed.timestamp = datetime.now(timezone.utc)
+
         await channel.send(embed=embed)
+        logger.info(f"Stats sent to log channel: {channel.name}")
+    except ValueError:
+        logger.debug(f"Invalid LOG_CHANNEL_ID: {LOG_CHANNEL_ID}")
     except Exception as e:
-        logger.error(f"Failed to send message to log channel: {str(e)}")
+        logger.debug(f"Error in send_stats: {str(e)}")
 
 @tasks.loop(seconds=STATS_INTERVAL)
 async def send_periodic_stats() -> None:
@@ -224,24 +211,26 @@ async def on_ready() -> None:
         logger.info(f'Bot is active in {len(bot.guilds)} guilds')
         logger.info("Bot is ready to receive DMs")
         
-        await asyncio.sleep(2)
-        
-        # Ensure the bot has fully cached the guilds and channels
-        for guild in bot.guilds:
-            try:
-                await bot.fetch_guild(guild.id)
-            except discord.errors.Forbidden:
-                logger.warning(f"Bot doesn't have access to guild {guild.id}")
-            except discord.errors.HTTPException as e:
-                logger.error(f"HTTP error fetching guild {guild.id}: {e}")
-        
-        # Call the new function to send initial stats after ensuring the bot is fully ready
         asyncio.create_task(send_initial_stats())
     except Exception as e:
         logger.error(f"Error in on_ready event: {type(e).__name__}: {str(e)}")
 
 async def send_initial_stats() -> None:
-    await asyncio.sleep(5)  # Additional delay to ensure the bot has time to cache the log channel
+    await asyncio.sleep(5)
+    
+    if LOG_CHANNEL_ID:
+        try:
+            log_channel_id = int(LOG_CHANNEL_ID)
+            log_channel = bot.get_channel(log_channel_id)
+            if log_channel:
+                logger.info(f"Log channel found: {log_channel.name}")
+            else:
+                logger.debug(f"Could not find log channel with ID {log_channel_id}")
+        except ValueError:
+            logger.debug(f"Invalid LOG_CHANNEL_ID: {LOG_CHANNEL_ID}")
+    else:
+        logger.debug("LOG_CHANNEL_ID is not set")
+    
     await send_stats()
 
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
@@ -277,7 +266,6 @@ async def process_message(message: discord.Message, question: Optional[str] = No
                 update_user_context(message.author.id, answer, is_bot_response=True)
                 await send_long_message(message.channel, answer)
                 
-                # Log the received and sent messages
                 log_channel = bot.get_channel(LOG_CHANNEL_ID)
                 if log_channel:
                     await log_channel.send(f"Received message from {message.author} (ID: {message.author.id}): {question}")
@@ -292,7 +280,7 @@ async def process_message(message: discord.Message, question: Optional[str] = No
 
 async def reset_api_rate_limit(user_id: int) -> None:
     await asyncio.sleep(API_RATE_LIMIT_INTERVAL)
-    api_rate_limits[user_id] = 0
+    api_rate_limits[user_id] = max(0, api_rate_limits[user_id] - 1)
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
@@ -358,17 +346,7 @@ def quiet_exit() -> None:
     logging.shutdown()
     sys.exit(0)
 
-INITIAL_RETRY_DELAY = 5  # seconds
-MAX_RETRY_DELAY = 300  # 5 minutes
-
-@backoff.on_exception(backoff.expo, 
-                      HTTPException, 
-                      max_time=3600,  # 1 hour max retry time
-                      giveup=lambda e: e.status != 429)  # Only retry on rate limit errors
 async def start_bot() -> None:
-    initial_delay = 60  # 1 minute
-    logger.info(f"Waiting {initial_delay} seconds before starting...")
-    await asyncio.sleep(initial_delay)
     try:
         logger.info("Setting up signal handlers")
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -377,31 +355,11 @@ async def start_bot() -> None:
         logger.info("Calling startup function")
         await startup()
         
-        app = web.Application()
-        app.router.add_get("/", lambda request: web.Response(text="Bot is running"))
-        
-        runner = web.AppRunner(app)
-        await runner.setup()
-        port = int(os.getenv('PORT', 10000))
-        site = web.TCPSite(runner, '0.0.0.0', port)
-        await site.start()
-        
-        logger.info(f"Web server started on port {port}")
-        
         logger.info("Starting bot")
         await bot.start(DISCORD_TOKEN)
         
-    except HTTPException as e:
-        if e.status == 429:
-            logger.error(f"Full rate limit response: {e.response.headers}")
-            logger.error(f"Response body: {await e.response.text()}")
-            retry_after = e.response.headers.get('Retry-After', INITIAL_RETRY_DELAY)
-            retry_after = min(int(retry_after), MAX_RETRY_DELAY)
-            logger.warning(f"Rate limited. Retrying in {retry_after} seconds.")
-            await asyncio.sleep(retry_after)
-            raise  # This will trigger the backoff retry
-        else:
-            logger.error(f"HTTP Exception: {e}")
+    except discord.errors.HTTPException as e:
+        logger.error(f"HTTP Exception: {e}")
     except asyncio.CancelledError:
         logger.info("Bot startup cancelled")
     except Exception as e:
@@ -412,8 +370,6 @@ async def start_bot() -> None:
             await session.close()
         if conn:
             await conn.close()
-        if 'runner' in locals():
-            await runner.cleanup()
 
 async def startup() -> None:
     global conn, session
@@ -423,9 +379,14 @@ async def startup() -> None:
     conn = TCPConnector(limit=10)
     session = ClientSession(connector=conn)
     
-    send_periodic_stats.start()
+    asyncio.create_task(delayed_start_periodic_stats())
     
     logger.info("Bot startup completed")
+
+async def delayed_start_periodic_stats() -> None:
+    await asyncio.sleep(10)
+    send_periodic_stats.start()
+    logger.info("Periodic stats sending started")
 
 if __name__ == "__main__":
     try:
