@@ -9,6 +9,8 @@ import sys
 import traceback
 from collections import deque, Counter, defaultdict
 from typing import Optional, Dict, Any, List, Tuple
+import fcntl
+import socket
 
 import aiohttp
 from aiohttp import ClientSession, TCPConnector, ClientTimeout
@@ -20,7 +22,6 @@ from discord.ext import commands, tasks
 from discord import Embed
 from dotenv import load_dotenv
 
-# Load configuration
 from config import (
     DISCORD_TOKEN, PERPLEXITY_API_KEY, LOG_CHANNEL_ID, PERPLEXITY_API_URL,
     PERPLEXITY_TIMEOUT, MAX_RETRIES, RETRY_DELAY, MAX_CONTEXT_MESSAGES,
@@ -32,13 +33,11 @@ def setup_logging() -> logging.Logger:
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
-    # Console handler with RichHandler
     console_handler = RichHandler(rich_tracebacks=True)
     console_handler.setLevel(getattr(logging, LOG_LEVEL))
     console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
     logger.addHandler(console_handler)
 
-    # Set Discord-related loggers to WARNING
     for module in ['discord', 'discord.http', 'discord.gateway']:
         logging.getLogger(module).setLevel(logging.WARNING)
 
@@ -56,7 +55,6 @@ user_contexts: Dict[int, deque] = {}
 message_counter = Counter()
 command_counter = Counter()
 
-# Replace the existing api_rate_limits with a more robust solution
 class RateLimiter:
     def __init__(self, max_calls, interval):
         self.max_calls = max_calls
@@ -68,7 +66,6 @@ class RateLimiter:
         if user_id not in self.calls:
             self.calls[user_id] = []
         
-        # Remove old calls
         self.calls[user_id] = [call_time for call_time in self.calls[user_id] if current_time - call_time <= self.interval]
         
         if len(self.calls[user_id]) >= self.max_calls:
@@ -200,6 +197,12 @@ async def send_stats() -> None:
             logger.debug(f"Could not find log channel with ID {log_channel_id}")
             return
 
+        async for message in channel.history(limit=1):
+            if message.author == bot.user and message.embeds and message.embeds[0].title == "Bot Statistics":
+                if (datetime.now(timezone.utc) - message.created_at).total_seconds() < STATS_INTERVAL / 2:
+                    logger.debug("Recent stats message found, skipping")
+                    return
+
         embed = Embed(title="Bot Statistics", color=0xff0000)
         embed.add_field(name="Total Messages", value=sum(message_counter.values()))
         embed.add_field(name="Unique Users", value=len(message_counter))
@@ -225,12 +228,20 @@ async def send_stats() -> None:
 async def send_periodic_stats() -> None:
     await send_stats()
 
+def log_instance_info():
+    hostname = socket.gethostname()
+    ip_address = socket.gethostbyname(hostname)
+    pid = os.getpid()
+    logger.info(f"Bot instance started - Hostname: {hostname}, IP: {ip_address}, PID: {pid}")
+
 @bot.event
 async def on_ready() -> None:
     try:
         logger.info(f'{bot.user} has connected to Discord!')
         logger.info(f'Bot is active in {len(bot.guilds)} guilds')
         logger.info("Bot is ready to receive DMs")
+        
+        log_instance_info()
         
         asyncio.create_task(send_initial_stats())
     except Exception as e:
@@ -255,8 +266,12 @@ async def send_initial_stats() -> None:
     await send_stats()
 
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
+    process_id = f"{message.id}_{int(time.time())}"
+    logger.info(f"Starting process_message {process_id}")
+
     if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
+        logger.info(f"Rate limited message {process_id}")
         return
 
     if not question:
@@ -281,20 +296,60 @@ async def process_message(message: discord.Message, question: Optional[str] = No
             if response and 'choices' in response:
                 answer = response['choices'][0]['message']['content']
                 update_user_context(message.author.id, answer, is_bot_response=True)
+                
+                async for msg in message.channel.history(limit=5):
+                    if msg.author == bot.user and msg.content.startswith(answer[:100]):
+                        logger.info(f"Duplicate response detected for {process_id}, skipping")
+                        return
+                
                 await send_long_message(message.channel, answer)
                 
                 log_channel = bot.get_channel(LOG_CHANNEL_ID)
                 if log_channel:
-                    await log_channel.send(f"Received message from {message.author} (ID: {message.author.id}): {question}")
-                    await log_channel.send(f"Sent response to {message.author} (ID: {message.author.id}): {answer}")
+                    # Create an embed for the incoming message
+                    incoming_embed = discord.Embed(
+                        title="Incoming Message",
+                        description=question,
+                        color=0x00ff00,  # Green color
+                        timestamp=message.created_at
+                    )
+                    incoming_embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
+                    incoming_embed.add_field(name="User ID", value=message.author.id, inline=True)
+                    incoming_embed.add_field(name="Channel Type", value="DM" if isinstance(message.channel, discord.DMChannel) else "Server", inline=True)
+                    if not isinstance(message.channel, discord.DMChannel):
+                        incoming_embed.add_field(name="Server", value=message.guild.name, inline=True)
+                        incoming_embed.add_field(name="Channel", value=message.channel.name, inline=True)
+                    incoming_embed.add_field(name="Total Messages", value=message_counter[message.author.id], inline=True)
+                    incoming_embed.add_field(name="Command Used", value="DM" if isinstance(message.channel, discord.DMChannel) else "!defi", inline=True)
+                    
+                    await log_channel.send(embed=incoming_embed)
+
+                    # Create an embed for the outgoing message
+                    outgoing_embed = discord.Embed(
+                        title="Outgoing Message",
+                        description=answer[:1024],  # Discord has a 1024 character limit for embed description
+                        color=0x0000ff,  # Blue color
+                        timestamp=datetime.now(timezone.utc)
+                    )
+                    outgoing_embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+                    outgoing_embed.add_field(name="Recipient", value=f"{message.author.name} (ID: {message.author.id})", inline=False)
+                    
+                    if len(answer) > 1024:
+                        outgoing_embed.add_field(name="Full Response", value="(See next message)", inline=False)
+                        await log_channel.send(embed=outgoing_embed)
+                        await log_channel.send(f"Full response to {message.author.name} (ID: {message.author.id}):\n\n{answer}")
+                    else:
+                        await log_channel.send(embed=outgoing_embed)
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
                 await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
         except Exception as e:
-            logger.error(f"Error in process_message: {str(e)}")
+            logger.error(f"Error in process_message {process_id}: {str(e)}")
             logger.error(traceback.format_exc())
             error_message = "An unexpected error occurred. Please try again later."
             await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
+    
+    logger.info(f"Completed process_message {process_id}")
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
@@ -390,6 +445,8 @@ async def startup() -> None:
     console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
     logger.info("Bot startup initiated")
     
+    log_instance_info()
+    
     conn = TCPConnector(limit=10)
     session = ClientSession(connector=conn)
     
@@ -402,6 +459,18 @@ async def delayed_start_periodic_stats() -> None:
     send_periodic_stats.start()
     logger.info("Periodic stats sending started")
 
+def ensure_single_instance():
+    lock_file = '/tmp/securepath_bot.lock'
+    fp = open(lock_file, 'w')
+    try:
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except IOError:
+        print("Another instance of the bot is already running. Exiting.")
+        sys.exit(1)
+    return fp
+
+lock_file_handle = ensure_single_instance()
+
 if __name__ == "__main__":
     try:
         asyncio.run(start_bot())
@@ -412,4 +481,5 @@ if __name__ == "__main__":
         logger.error(traceback.format_exc())
     finally:
         logger.info("Bot shutting down")
+        lock_file_handle.close()
         quiet_exit()
