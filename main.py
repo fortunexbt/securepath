@@ -55,7 +55,29 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 user_contexts: Dict[int, deque] = {}
 message_counter = Counter()
 command_counter = Counter()
-api_rate_limits = defaultdict(lambda: 0)
+
+# Replace the existing api_rate_limits with a more robust solution
+class RateLimiter:
+    def __init__(self, max_calls, interval):
+        self.max_calls = max_calls
+        self.interval = interval
+        self.calls = {}
+
+    def is_rate_limited(self, user_id):
+        current_time = time.time()
+        if user_id not in self.calls:
+            self.calls[user_id] = []
+        
+        # Remove old calls
+        self.calls[user_id] = [call_time for call_time in self.calls[user_id] if current_time - call_time <= self.interval]
+        
+        if len(self.calls[user_id]) >= self.max_calls:
+            return True
+        
+        self.calls[user_id].append(current_time)
+        return False
+
+api_rate_limiter = RateLimiter(API_RATE_LIMIT_MAX, API_RATE_LIMIT_INTERVAL)
 
 def get_user_context(user_id: int) -> deque:
     return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
@@ -131,14 +153,13 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
             else:
                 response_text = await response.text()
                 logger.error(f"API request failed with status {response.status}. Full Response: {response_text}")
-                raise Exception(f"API request failed with status {response.status}: {response_text}")
+                return None
     except asyncio.TimeoutError:
         logger.error(f"Request to Perplexity API timed out after {PERPLEXITY_TIMEOUT} seconds")
-        raise
     except Exception as e:
-        elapsed_time = time.time() - start_time
-        logger.error(f"API request failed after {elapsed_time:.2f} seconds: {str(e)}", exc_info=True)
-        raise
+        logger.error(f"Error in fetch_perplexity_response: {str(e)}")
+        logger.error(traceback.format_exc())
+    return None
 
 async def send_long_message(ctx: commands.Context, message: str) -> Optional[discord.Message]:
     max_length = 4096
@@ -234,13 +255,9 @@ async def send_initial_stats() -> None:
     await send_stats()
 
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
-    current_time = time.time()
-    if api_rate_limits[message.author.id] >= API_RATE_LIMIT_MAX:
+    if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
         return
-
-    api_rate_limits[message.author.id] += 1
-    asyncio.create_task(reset_api_rate_limit(message.author.id))
 
     if not question:
         question = message.content.strip()
@@ -274,13 +291,10 @@ async def process_message(message: discord.Message, question: Optional[str] = No
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
                 await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
         except Exception as e:
-            logger.error(f"Error processing message: {str(e)}", exc_info=True)
+            logger.error(f"Error in process_message: {str(e)}")
+            logger.error(traceback.format_exc())
             error_message = "An unexpected error occurred. Please try again later."
             await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
-
-async def reset_api_rate_limit(user_id: int) -> None:
-    await asyncio.sleep(API_RATE_LIMIT_INTERVAL)
-    api_rate_limits[user_id] = max(0, api_rate_limits[user_id] - 1)
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
