@@ -1,41 +1,9 @@
-# VSCode
-.vscode/
-
-# Backup files
-backup/
-
-# Cache directories
-cache/
-perplexity_cache/
-
-# Logs
-logs/
-
-myenv/
-.env
-
-# Python cache files
-__pycache__/
-*.py[cod]
-*$py.class
-
-# OS-specific files
-.DS_Store
-Thumbs.db
-
-# Temporary files
-*.tmp
-*.bak
-*.swp
-
-# Keep these files
-!.gitignore
-!README.md
-!main.py
-!requirements.txt
-!.dockerignore
-
-# Explicitly ignore backup Python files
-backup/*.py
-Proclife
-pyrightconfig.json
+/*
+!/.gitignore
+!/main.py
+!/config.py
+!/requirements.txt
+!/runtime.txt
+!/README.md
+!/.dockerignore
+!/Procfile
