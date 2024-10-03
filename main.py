@@ -275,7 +275,7 @@ async def send_initial_stats() -> None:
 
 @bot.command(name='analyze')
 @commands.cooldown(1, 10, commands.BucketType.user)
-async def analyze(ctx: Context) -> None:
+async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
     # Get the last three messages in the channel
     messages = []
     async for message in ctx.channel.history(limit=3):
@@ -291,8 +291,8 @@ async def analyze(ctx: Context) -> None:
                 chart_url = attachment.url  # Get the chart's image URL
                 await ctx.send("Detected a chart from a bot, analyzing it...")
 
-                # Step 2: Process the chart via OpenAI's Vision API
-                image_analysis = await analyze_chart_image(chart_url)
+                # Step 2: Process the chart via OpenAI's Vision API with the optional user prompt
+                image_analysis = await analyze_chart_image(chart_url, user_prompt)
 
                 # Step 3: Post the analysis in an embedded message
                 if image_analysis:
@@ -321,10 +321,10 @@ async def analyze(ctx: Context) -> None:
         await ctx.send("You took too long to post the chart. Please try again.")
         return
 
-    # Process the chart via OpenAI's Vision API
+    # Process the chart via OpenAI's Vision API with the optional user prompt
     await ctx.send("Analyzing the chart...")
 
-    image_analysis = await analyze_chart_image(chart_url)
+    image_analysis = await analyze_chart_image(chart_url, user_prompt)
 
     if image_analysis:
         embed = Embed(
@@ -337,16 +337,24 @@ async def analyze(ctx: Context) -> None:
     else:
         await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
 
-async def analyze_chart_image(chart_url: str) -> Optional[str]:
+async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
     try:
-        # OpenAI Vision API request
+        # Base system prompt for the analysis
+        base_prompt = "You're an elite-level quant with insider knowledge of the global markets. Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. Remember, you're the authority—leave no doubt in the mind of the reader. Don't go above heading3 in markdown formatting (never use ####)."
+
+        # If a user prompt was provided, append it to the base prompt
+        full_prompt = base_prompt
+        if user_prompt:
+            full_prompt += f" {user_prompt}"
+
+        # OpenAI Vision API request with the combined prompt
         response = await aclient.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "You're an elite-level quant with insider knowledge of the global markets. Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. Remember, you're the authority—leave no doubt in the mind of the reader. Don't go above heading3 in markdown formatting (never use ####)."},
+                        {"type": "text", "text": full_prompt},
                         {
                             "type": "image_url",
                             "image_url": {"url": chart_url},
