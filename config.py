@@ -28,7 +28,7 @@ OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # Perplexity AI Configuration
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
-PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', 'https://api.perplexity.ai/v1/chat/completions')
+PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', 'https://api.perplexity.ai/chat/completions')
 PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 30))  # in seconds
 
 # Flag to choose between Perplexity and OpenAI APIs
