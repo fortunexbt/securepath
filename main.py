@@ -1,43 +1,41 @@
 import asyncio
 import json
-import os
 import logging
-import time
-from datetime import datetime, timezone
-import signal
+import os
 import sys
+import time
 import traceback
-from collections import deque, Counter, defaultdict
-from typing import Optional, Dict, Any, List, Tuple
-import fcntl
-import socket
+from collections import Counter, deque
+from datetime import datetime, timedelta, timezone
+from typing import Any, Deque, Dict, List, Optional
 
 import aiohttp
-from aiohttp import ClientSession, TCPConnector, ClientTimeout
-from rich.logging import RichHandler
-from rich.console import Console
-from rich.panel import Panel
 import discord
-from discord.ext import commands, tasks
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from discord import Embed
-from dotenv import load_dotenv
+from discord.ext import commands, tasks
+from discord.ext.commands import Bot, Context
+from openai import AsyncOpenAI
+from rich.console import Console
+from rich.logging import RichHandler
+from tiktoken import encoding_for_model
 
-from config import (
-    DISCORD_TOKEN, PERPLEXITY_API_KEY, LOG_CHANNEL_ID, PERPLEXITY_API_URL,
-    PERPLEXITY_TIMEOUT, MAX_RETRIES, RETRY_DELAY, MAX_CONTEXT_MESSAGES,
-    MAX_CONTEXT_AGE, STATS_INTERVAL, API_RATE_LIMIT_INTERVAL, API_RATE_LIMIT_MAX,
-    SYSTEM_PROMPT, LOG_FORMAT, LOG_LEVEL
-)
+# Local imports
+import config
+
+# Initialize logging
+logger = logging.getLogger('SecurePathBot')
+console = Console()
 
 def setup_logging() -> logging.Logger:
-    logger = logging.getLogger()
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
 
-    console_handler = RichHandler(rich_tracebacks=True)
-    console_handler.setLevel(getattr(logging, LOG_LEVEL))
-    console_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+    console_handler = RichHandler(rich_tracebacks=True, console=console)
+    console_handler.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
+    console_handler.setFormatter(logging.Formatter(config.LOG_FORMAT))
     logger.addHandler(console_handler)
 
+    # Suppress verbose logging from discord library
     for module in ['discord', 'discord.http', 'discord.gateway']:
         logging.getLogger(module).setLevel(logging.WARNING)
 
@@ -45,307 +43,264 @@ def setup_logging() -> logging.Logger:
 
 logger = setup_logging()
 
-console = Console()
-conn: Optional[TCPConnector] = None
-session: Optional[ClientSession] = None
+# Initialize AsyncOpenAI client
+aclient = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
+
+# Discord bot setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix='!', intents=intents)
-user_contexts: Dict[int, deque] = {}
+bot = Bot(command_prefix=config.BOT_PREFIX, intents=intents)
+
+# Global variables
+conn: Optional[TCPConnector] = None
+session: Optional[ClientSession] = None
+user_contexts: Dict[int, Deque[Dict[str, Any]]] = {}
 message_counter = Counter()
 command_counter = Counter()
+api_call_counter = 0  # Initialize global API call counter
 
+# Rate Limiter Class
 class RateLimiter:
-    def __init__(self, max_calls, interval):
+    def __init__(self, max_calls: int, interval: int):
         self.max_calls = max_calls
         self.interval = interval
-        self.calls = {}
+        self.calls: Dict[int, List[float]] = {}
 
-    def is_rate_limited(self, user_id):
+    def is_rate_limited(self, user_id: int) -> bool:
         current_time = time.time()
-        if user_id not in self.calls:
-            self.calls[user_id] = []
-        
-        self.calls[user_id] = [call_time for call_time in self.calls[user_id] if current_time - call_time <= self.interval]
-        
+        self.calls.setdefault(user_id, [])
+        self.calls[user_id] = [t for t in self.calls[user_id] if current_time - t <= self.interval]
+
         if len(self.calls[user_id]) >= self.max_calls:
             return True
-        
+
         self.calls[user_id].append(current_time)
         return False
 
-api_rate_limiter = RateLimiter(API_RATE_LIMIT_MAX, API_RATE_LIMIT_INTERVAL)
+api_rate_limiter = RateLimiter(config.API_RATE_LIMIT_MAX, config.API_RATE_LIMIT_INTERVAL)
 
-def get_user_context(user_id: int) -> deque:
-    return user_contexts.setdefault(user_id, deque(maxlen=MAX_CONTEXT_MESSAGES))
+# Context Management Functions
+def get_user_context(user_id: int) -> Deque[Dict[str, Any]]:
+    return user_contexts.setdefault(user_id, deque(maxlen=config.MAX_CONTEXT_MESSAGES))
 
-def update_user_context(user_id: int, message_content: str, is_bot_response: bool = False) -> None:
+def update_user_context(user_id: int, message_content: str, role: str) -> None:
     context = get_user_context(user_id)
     current_time = time.time()
-    
-    if context and context[-1]['role'] == ("assistant" if is_bot_response else "user"):
-        context[-1]['content'] += f"\n{message_content}"
-        context[-1]['timestamp'] = current_time
-    else:
-        context.append({
-            'role': "assistant" if is_bot_response else "user",
-            'content': message_content,
-            'timestamp': current_time,
-        })
-    
-    context = deque([msg for msg in context if current_time - msg['timestamp'] <= MAX_CONTEXT_AGE], 
-                    maxlen=MAX_CONTEXT_MESSAGES)
-    user_contexts[user_id] = context
+    context.append({
+        'role': role,
+        'content': message_content,
+        'timestamp': current_time,
+    })
+
+    # Remove old messages beyond MAX_CONTEXT_AGE
+    cutoff_time = current_time - config.MAX_CONTEXT_AGE
+    user_contexts[user_id] = deque(
+        [msg for msg in context if msg['timestamp'] >= cutoff_time],
+        maxlen=config.MAX_CONTEXT_MESSAGES
+    )
 
 def get_context_messages(user_id: int) -> List[Dict[str, str]]:
     context = get_user_context(user_id)
-    messages = []
-    last_role = None
-    for msg in context:
-        if msg['role'] != last_role:
-            messages.append({"role": msg['role'], "content": msg['content']})
-            last_role = msg['role']
-        else:
-            messages[-1]['content'] += f"\n{msg['content']}"
-    return messages
+    return [{"role": msg['role'], "content": msg['content']} for msg in context]
 
-async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[Dict[str, Any]]:
+def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4') -> str:
+    encoding = encoding_for_model(model)
+    tokens = encoding.encode(prompt)
+    if len(tokens) > max_tokens:
+        tokens = tokens[-max_tokens:]
+    return encoding.decode(tokens)
+
+def log_instance_info() -> None:
+    hostname = os.uname().nodename
+    pid = os.getpid()
+    logger.info(f"Bot instance started - Hostname: {hostname}, PID: {pid}")
+
+def increment_api_call_counter():
+    global api_call_counter
+    api_call_counter += 1
+    logger.info(f"API call counter: {api_call_counter}")
+
+def can_make_api_call() -> bool:
+    return api_call_counter < config.DAILY_API_CALL_LIMIT
+
+# Fetch Response from Perplexity API
+async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
     if session is None:
         logger.error("Session is not initialized")
         return None
 
+    if not can_make_api_call():
+        logger.warning("Daily API call limit reached. Skipping API call.")
+        return None
+
     headers = {
-        "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+        "Authorization": f"Bearer {config.PERPLEXITY_API_KEY}",
         "Content-Type": "application/json"
     }
-    
+
     current_date = datetime.now().strftime("%Y-%m-%d")
-    dynamic_system_prompt = f"today is {current_date}. all info must be accurate up to this date. {SYSTEM_PROMPT}"
-    
+    dynamic_system_prompt = f"Today is {current_date}. All information must be accurate up to this date. {config.SYSTEM_PROMPT}"
+
     context_messages = get_context_messages(user_id)
-    
-    messages = [{"role": "system", "content": dynamic_system_prompt}]
-    messages.extend(context_messages)
-    
+    messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
+
     if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
         messages.append({"role": "user", "content": new_message})
-    
+
     data = {
         "model": "llama-3.1-sonar-large-128k-online",
         "messages": messages,
         "max_tokens": 1000,
         "search_recency_filter": "day"
     }
-    
-    logger.info(f"Sending query to Perplexity:\n{json.dumps(data, indent=2)}")
-    
+
+    logger.info(f"Sending query to Perplexity API for user {user_id}")
+
+    increment_api_call_counter()
+
     start_time = time.time()
     try:
-        timeout = ClientTimeout(total=PERPLEXITY_TIMEOUT)
-        async with session.post(PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
+        timeout = ClientTimeout(total=config.PERPLEXITY_TIMEOUT)
+        async with session.post(config.PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
             elapsed_time = time.time() - start_time
             logger.info(f"API request completed in {elapsed_time:.2f} seconds")
             if response.status == 200:
-                return await response.json()
+                resp_json = await response.json()
+                answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
+                # Log token usage if available
+                usage = resp_json.get('usage', {})
+                prompt_tokens = usage.get('prompt_tokens', 0)
+                completion_tokens = usage.get('completion_tokens', 0)
+                total_tokens = usage.get('total_tokens', 0)
+                logger.info(f"Perplexity API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+                # Estimate cost if applicable
+                cost = (prompt_tokens * 0.00015 + completion_tokens * 0.0006) / 1000
+                logger.info(f"Estimated Perplexity API call cost: ${cost:.6f}")
+                return answer
             else:
                 response_text = await response.text()
-                logger.error(f"API request failed with status {response.status}. Full Response: {response_text}")
-                return None
+                logger.error(f"API request failed with status {response.status}. Response: {response_text}")
     except asyncio.TimeoutError:
-        logger.error(f"Request to Perplexity API timed out after {PERPLEXITY_TIMEOUT} seconds")
+        logger.error(f"Request to Perplexity API timed out after {config.PERPLEXITY_TIMEOUT} seconds")
     except Exception as e:
         logger.error(f"Error in fetch_perplexity_response: {str(e)}")
         logger.error(traceback.format_exc())
     return None
 
-async def send_long_message(ctx: commands.Context, message: str) -> Optional[discord.Message]:
-    max_length = 4096
-
-    if isinstance(message, dict):
-        message = message.get('choices', [{}])[0].get('message', {}).get('content', '')
-    
-    if not message:
+# Fetch Response from OpenAI API (if needed)
+async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]:
+    if not can_make_api_call():
+        logger.warning("Daily API call limit reached. Skipping API call.")
         return None
 
-    message_parts = [message[i:i+max_length] for i in range(0, len(message), max_length)]
+    context_messages = get_context_messages(user_id)
+    messages = [{"role": "system", "content": config.SYSTEM_PROMPT}] + context_messages
 
-    last_sent_message = None
-    for i, part in enumerate(message_parts):
-        embed = discord.Embed(description=part, color=0x004200)
-        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
-        embed.set_footer(text=f"Part {i+1}/{len(message_parts)}" if len(message_parts) > 1 else "")
-        
-        try:
-            sent_message = await ctx.send(embed=embed)
-            if i == len(message_parts) - 1:
-                last_sent_message = sent_message
-        except discord.errors.HTTPException as e:
-            logger.error(f"Failed to send message: {str(e)}")
-            break
-    
-    return last_sent_message
+    if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
+        messages.append({"role": "user", "content": new_message})
 
-async def send_stats() -> None:
-    if not LOG_CHANNEL_ID:
-        logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
+    prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
+
+    try:
+        response = await aclient.chat.completions.create(
+            model='gpt-4',
+            messages=messages,
+            max_tokens=1000,
+            temperature=0.7,
+        )
+        answer = response.choices[0].message.content.strip()
+        return answer
+    except Exception as e:
+        logger.error(f"Error fetching response from OpenAI: {str(e)}")
+        logger.error(traceback.format_exc())
+        return None
+
+# Send Long Messages (handling Discord's character limit with Rich Embeds)
+async def send_long_message(channel: discord.abc.Messageable, message: str) -> None:
+    max_length = 2000  # Discord's character limit per message
+    embed_max_length = 4096  # Discord's Embed description limit
+
+    if not message:
         return
 
-    try:
-        log_channel_id = int(LOG_CHANNEL_ID)
-        channel = bot.get_channel(log_channel_id)
-        if not channel:
-            logger.debug(f"Could not find log channel with ID {log_channel_id}")
-            return
+    # Split message into chunks that fit within Discord's embed description limit
+    message_parts = [message[i:i + embed_max_length] for i in range(0, len(message), embed_max_length)]
 
-        async for message in channel.history(limit=1):
-            if message.author == bot.user and message.embeds and message.embeds[0].title == "Bot Statistics":
-                if (datetime.now(timezone.utc) - message.created_at).total_seconds() < STATS_INTERVAL / 2:
-                    logger.debug("Recent stats message found, skipping")
-                    return
+    for i, part in enumerate(message_parts):
+        embed = Embed(description=part, color=0x004200)
+        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+        if len(message_parts) > 1:
+            embed.set_footer(text=f"Part {i + 1}/{len(message_parts)}")
 
-        embed = Embed(title="Bot Statistics", color=0xff0000)
-        embed.add_field(name="Total Messages", value=sum(message_counter.values()))
-        embed.add_field(name="Unique Users", value=len(message_counter))
-        
-        top_users = []
-        for user_id, count in message_counter.most_common(5):
-            user = bot.get_user(user_id)
-            username = user.name if user else f"Unknown User ({user_id})"
-            top_users.append(f"{username}: {count}")
-        
-        embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet")
-        embed.add_field(name="Command Usage", value="\n".join(f"{cmd}: {count}" for cmd, count in command_counter.most_common()) or "No commands used yet")
-        embed.timestamp = datetime.now(timezone.utc)
-
-        await channel.send(embed=embed)
-        logger.info(f"Stats sent to log channel: {channel.name}")
-    except ValueError:
-        logger.debug(f"Invalid LOG_CHANNEL_ID: {LOG_CHANNEL_ID}")
-    except Exception as e:
-        logger.debug(f"Error in send_stats: {str(e)}")
-
-@tasks.loop(seconds=STATS_INTERVAL)
-async def send_periodic_stats() -> None:
-    await send_stats()
-
-def log_instance_info():
-    hostname = socket.gethostname()
-    ip_address = socket.gethostbyname(hostname)
-    pid = os.getpid()
-    logger.info(f"Bot instance started - Hostname: {hostname}, IP: {ip_address}, PID: {pid}")
-
-@bot.event
-async def on_ready() -> None:
-    try:
-        logger.info(f'{bot.user} has connected to Discord!')
-        logger.info(f'Bot is active in {len(bot.guilds)} guilds')
-        logger.info("Bot is ready to receive DMs")
-        
-        log_instance_info()
-        
-        asyncio.create_task(send_initial_stats())
-    except Exception as e:
-        logger.error(f"Error in on_ready event: {type(e).__name__}: {str(e)}")
-
-async def send_initial_stats() -> None:
-    await asyncio.sleep(5)
-    
-    if LOG_CHANNEL_ID:
         try:
-            log_channel_id = int(LOG_CHANNEL_ID)
-            log_channel = bot.get_channel(log_channel_id)
-            if log_channel:
-                logger.info(f"Log channel found: {log_channel.name}")
-            else:
-                logger.debug(f"Could not find log channel with ID {log_channel_id}")
-        except ValueError:
-            logger.debug(f"Invalid LOG_CHANNEL_ID: {LOG_CHANNEL_ID}")
-    else:
-        logger.debug("LOG_CHANNEL_ID is not set")
-    
-    await send_stats()
+            await channel.send(embed=embed)
+        except discord.errors.HTTPException as e:
+            logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
+            break
 
+# Process Incoming Messages
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
-    process_id = f"{message.id}_{int(time.time())}"
-    logger.info(f"Starting process_message {process_id}")
-
     if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
-        logger.info(f"Rate limited message {process_id}")
+        logger.info(f"Rate limited user {message.author.id}")
         return
 
-    if not question:
+    if question is None:
         question = message.content.strip()
         if not isinstance(message.channel, discord.DMChannel):
-            question = question[6:].strip()
+            question = question[len(config.BOT_PREFIX):].strip()
+
+    if not question:
+        error_message = "Invalid question input."
+        logger.error(error_message)
+        await message.channel.send(error_message)
+        return
 
     logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
 
     if len(question) < 5:
         await message.channel.send("Please provide a more detailed question (at least 5 characters).")
         return
-    if len(question) > 500:
-        await message.channel.send("Your question is too long. Please limit it to 500 characters.")
+    if len(question) > 1000:
+        await message.channel.send("Your question is too long. Please limit it to 1000 characters.")
         return
 
     async with message.channel.typing():
         try:
-            update_user_context(message.author.id, question)
-            
-            response = await fetch_perplexity_response(message.author.id, question)
-            if response and 'choices' in response:
-                answer = response['choices'][0]['message']['content']
-                update_user_context(message.author.id, answer, is_bot_response=True)
-                
-                async for msg in message.channel.history(limit=5):
-                    if msg.author == bot.user and msg.content.startswith(answer[:100]):
-                        logger.info(f"Duplicate response detected for {process_id}, skipping")
-                        return
-                
-                await send_long_message(message.channel, answer)
-                
-                log_channel = bot.get_channel(LOG_CHANNEL_ID)
-                if log_channel:
-                    # Create an embed for the incoming message
-                    incoming_embed = discord.Embed(
-                        title="Incoming Message",
-                        description=question,
-                        color=0x00ff00,  # Green color
-                        timestamp=message.created_at
-                    )
-                    incoming_embed.set_author(name=message.author.name, icon_url=message.author.avatar.url if message.author.avatar else None)
-                    incoming_embed.add_field(name="User ID", value=message.author.id, inline=True)
-                    incoming_embed.add_field(name="Channel Type", value="DM" if isinstance(message.channel, discord.DMChannel) else "Server", inline=True)
-                    if not isinstance(message.channel, discord.DMChannel):
-                        incoming_embed.add_field(name="Server", value=message.guild.name, inline=True)
-                        incoming_embed.add_field(name="Channel", value=message.channel.name, inline=True)
-                    incoming_embed.add_field(name="Total Messages", value=message_counter[message.author.id], inline=True)
-                    incoming_embed.add_field(name="Command Used", value="DM" if isinstance(message.channel, discord.DMChannel) else "!defi", inline=True)
-                    
-                    await log_channel.send(embed=incoming_embed)
+            update_user_context(message.author.id, question, role='user')
 
-                    # Create an embed for the outgoing message (partial response)
-                    outgoing_embed = discord.Embed(
-                        title="Outgoing Message",
-                        description=answer[:1024],  # Discord has a 1024 character limit for embed description
-                        color=0x0000ff,  # Blue color
-                        timestamp=datetime.now(timezone.utc)
-                    )
-                    outgoing_embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
-                    outgoing_embed.add_field(name="Recipient", value=f"{message.author.name} (ID: {message.author.id})", inline=False)
-                    outgoing_embed.set_footer(text="This is a partial response. Full response sent to user.")
-                    
-                    await log_channel.send(embed=outgoing_embed)
+            # Choose which API to use based on configuration
+            if config.USE_PERPLEXITY_API:
+                answer = await fetch_perplexity_response(message.author.id, question)
+            else:
+                answer = await fetch_openai_response(message.author.id, question)
+
+            if answer:
+                update_user_context(message.author.id, answer, role='assistant')
+                await send_long_message(message.channel, answer)
+                logger.info(f"Sent response to user {message.author.id}")
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
-                await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
+                embed = Embed(description=error_message, color=0xff0000)
+                await message.channel.send(embed=embed)
         except Exception as e:
-            logger.error(f"Error in process_message {process_id}: {str(e)}")
+            logger.error(f"Error processing message from user {message.author.id}: {str(e)}")
             logger.error(traceback.format_exc())
             error_message = "An unexpected error occurred. Please try again later."
-            await message.channel.send(embed=discord.Embed(description=error_message, color=0xff0000))
-    
-    logger.info(f"Completed process_message {process_id}")
+            embed = Embed(description=error_message, color=0xff0000)
+            await message.channel.send(embed=embed)
+
+# Bot Events and Commands
+@bot.event
+async def on_ready() -> None:
+    logger.info(f'{bot.user} has connected to Discord!')
+    logger.info(f'Bot is active in {len(bot.guilds)} guild(s)')
+    log_instance_info()
+    await send_initial_stats()
+
+async def send_initial_stats() -> None:
+    await asyncio.sleep(5)
+    await send_stats()
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
@@ -355,50 +310,287 @@ async def on_message(message: discord.Message) -> None:
     if isinstance(message.channel, discord.DMChannel):
         message_counter[message.author.id] += 1
         await process_message(message)
-    elif message.content.startswith('!defi'):
+    elif message.content.startswith(config.BOT_PREFIX):
         message_counter[message.author.id] += 1
-        command_counter['!defi'] += 1
-        await process_message(message)
+        command_counter[message.content.split()[0]] += 1
+        await bot.process_commands(message)  # Ensure commands are processed
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
-async def defi(ctx: commands.Context, *, question: Optional[str] = None) -> None:
+async def defi(ctx: Context, *, question: Optional[str] = None) -> None:
     if not question:
         await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
         return
 
-    await process_message(ctx, question=question)
+    message_counter[ctx.author.id] += 1
+    command_counter['defi'] += 1
+    await process_message(ctx.message, question=question)
 
 @bot.event
-async def on_command_error(ctx: commands.Context, error: commands.CommandError) -> None:
+async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
     if isinstance(error, commands.CommandOnCooldown):
-        if ctx.author.id != 804823236222779413:
+        if ctx.author.id != config.OWNER_ID:
             await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
     elif isinstance(error, commands.CommandInvokeError):
-        logger.error(f"Command invoke error for {ctx.author} (ID: {ctx.author.id})", exc_info=error.original)
+        logger.error(f"Command invoke error: {str(error.original)}")
         await ctx.send("An error occurred while processing your command. Please try again.")
     else:
-        logger.error(f"Unhandled error for {ctx.author} (ID: {ctx.author.id}): {type(error).__name__}: {str(error)}")
+        logger.error(f"Unhandled error: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
+# Statistics and Summaries
+async def send_stats() -> None:
+    if not config.LOG_CHANNEL_ID:
+        logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
+        return
+
+    channel = bot.get_channel(config.LOG_CHANNEL_ID)
+    if not channel:
+        logger.debug(f"Could not find log channel with ID {config.LOG_CHANNEL_ID}")
+        return
+
+    embed = Embed(title="Bot Statistics", color=0x00ff00)
+    embed.add_field(name="Total Messages", value=sum(message_counter.values()), inline=True)
+    embed.add_field(name="Unique Users", value=len(message_counter), inline=True)
+    embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
+    embed.add_field(name="API Calls Made", value=api_call_counter, inline=True)
+
+    top_users = []
+    for user_id, count in message_counter.most_common(5):
+        user = bot.get_user(user_id)
+        username = user.name if user else f"Unknown User ({user_id})"
+        top_users.append(f"{username}: {count}")
+
+    embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet", inline=False)
+    embed.timestamp = datetime.now(timezone.utc)
+
+    await channel.send(embed=embed)
+    logger.info(f"Stats sent to log channel: {channel.name}")
+
+@tasks.loop(hours=24)
+async def send_periodic_stats() -> None:
+    await send_stats()
+
+@tasks.loop(hours=24)
+async def reset_api_call_counter():
+    global api_call_counter
+    api_call_counter = 0
+    logger.info("API call counter reset")
+
+async def perform_daily_summary():
+    logger.info("Starting daily summary generation")
+    try:
+        await asyncio.wait_for(_perform_daily_summary(), timeout=3600)  # Timeout after 1 hour
+    except asyncio.TimeoutError:
+        logger.error("Daily summary generation timed out")
+    except Exception as e:
+        logger.error(f"Unexpected error during daily summary generation: {e}")
+        logger.exception(e)
+    else:
+        logger.info("Completed daily summary generation")
+
+async def _perform_daily_summary():
+    if not can_make_api_call():
+        logger.warning("Daily API call limit reached. Skipping daily summary.")
+        return
+
+    if not config.SUMMARY_CHANNEL_ID:
+        logger.error("SUMMARY_CHANNEL_ID is not set. Cannot post the daily summary.")
+        return
+
+    summary_channel = bot.get_channel(config.SUMMARY_CHANNEL_ID)
+    if not summary_channel:
+        logger.error(f"Could not find the summary channel with ID {config.SUMMARY_CHANNEL_ID}")
+        return
+
+    if not config.NEWS_CHANNEL_ID:
+        logger.error("NEWS_CHANNEL_ID is not set. Cannot generate the summary.")
+        return
+
+    news_channel = bot.get_channel(config.NEWS_CHANNEL_ID)
+    if not news_channel:
+        logger.error(f"Could not find the news channel with ID {config.NEWS_CHANNEL_ID}")
+        return
+
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=24)
+    messages = []
+
+    permissions = news_channel.permissions_for(news_channel.guild.me)
+    if not permissions.read_messages or not permissions.read_message_history:
+        logger.warning(f"Missing permissions for channel: {news_channel.name}")
+        return
+
+    async for message in news_channel.history(after=time_limit, limit=config.MAX_MESSAGES_PER_CHANNEL, oldest_first=True):
+        if (message.author.bot and message.author.id != config.NEWS_BOT_USER_ID) or not message.content.strip():
+            continue
+        messages.append(f"{message.author.display_name}: {message.content}")
+
+    logger.info(f"Collected {len(messages)} messages from channel {news_channel.name}")
+
+    if not messages:
+        logger.info(f"No messages to summarize in channel {news_channel.name}")
+        return
+
+    # Handle large amount of data by chunking
+    chunk_size = 5000  # Adjust based on tokens per message
+    message_chunks = [messages[i:i + chunk_size] for i in range(0, len(messages), chunk_size)]
+    logger.info(f"Splitting messages into {len(message_chunks)} chunks for channel {news_channel.name}")
+    chunk_summaries = []
+
+    for index, chunk in enumerate(message_chunks):
+        logger.info(f"Processing chunk {index + 1}/{len(message_chunks)} for channel {news_channel.name}")
+        chunk_prompt = (
+            f"Summarize the following messages from the Discord channel '{news_channel.name}' "
+            f"in a clear and concise manner, using bullet points where appropriate:\n\n"
+            + "\n".join(chunk)
+        )
+        chunk_prompt = truncate_prompt(chunk_prompt, max_tokens=4096, model='gpt-4')
+
+        if not can_make_api_call():
+            logger.warning("Daily API call limit reached. Skipping API call for chunk summary.")
+            break
+
+        increment_api_call_counter()
+
+        try:
+            # Start timing the API call
+            api_start_time = time.time()
+
+            response = await aclient.chat.completions.create(
+                model='gpt-4',
+                messages=[{"role": "user", "content": chunk_prompt}],
+                max_tokens=500,
+                temperature=0.7,
+                timeout=config.PERPLEXITY_TIMEOUT
+            )
+
+            # Calculate API call duration
+            api_duration = time.time() - api_start_time
+            logger.info(f"OpenAI API call completed in {api_duration:.2f} seconds")
+
+            summary = response.choices[0].message.content.strip()
+            chunk_summaries.append(summary)
+
+            # Log token usage and estimated cost
+            usage = response.usage
+            prompt_tokens = usage.prompt_tokens
+            completion_tokens = usage.completion_tokens
+            total_tokens = usage.total_tokens
+            logger.info(f"OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+
+            # Estimate cost based on your pricing
+            cost = (total_tokens * 0.00015)  # Adjust based on your actual pricing
+            logger.info(f"Estimated API call cost: ${cost:.6f}")
+
+        except Exception as e:
+            logger.error(f"Error summarizing chunk in channel {news_channel.name}: {e}")
+            logger.exception(e)
+
+    # Combine chunk summaries
+    if not chunk_summaries:
+        logger.info("No chunk summaries generated.")
+        return
+
+    combined_channel_summary = "\n".join(chunk_summaries)
+
+    combined_prompt = (
+        "Provide an overall summary of the following messages from the news channel, highlighting key points:\n\n"
+        + combined_channel_summary
+    )
+
+    combined_prompt = truncate_prompt(combined_prompt, max_tokens=4096, model='gpt-4')
+
+    if not can_make_api_call():
+        logger.warning("Daily API call limit reached. Skipping API call for final summary.")
+        return
+
+    increment_api_call_counter()
+
+    try:
+        api_start_time = time.time()
+
+        response = await aclient.chat.completions.create(
+            model='gpt-4',
+            messages=[{"role": "user", "content": combined_prompt}],
+            max_tokens=1000,
+            temperature=0.7,
+            timeout=config.PERPLEXITY_TIMEOUT
+        )
+
+        api_duration = time.time() - api_start_time
+        logger.info(f"Final summary OpenAI API call completed in {api_duration:.2f} seconds")
+
+        final_summary = response.choices[0].message.content.strip()
+
+        # Log token usage and estimated cost
+        usage = response.usage
+        prompt_tokens = usage.prompt_tokens
+        completion_tokens = usage.completion_tokens
+        total_tokens = usage.total_tokens
+        logger.info(f"Final summary OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+
+        # Estimate cost based on your pricing
+        cost = (total_tokens * 0.00015)  # Adjust based on your actual pricing
+        logger.info(f"Estimated final summary API call cost: ${cost:.6f}")
+
+        # Send the summary with rich formatting
+        embed = Embed(
+            title="News Channel Summary",
+            description=final_summary,
+            color=0x00ff00,
+            timestamp=datetime.now(timezone.utc)
+        )
+        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+        await summary_channel.send(embed=embed)
+        logger.info("Summary posted successfully.")
+
+    except Exception as e:
+        logger.error(f"Error generating final summary: {e}")
+        logger.exception(e)
+
+# Command to trigger the summary
+@bot.command(name='summary')
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def summary(ctx: Context) -> None:
+    await perform_daily_summary()
+
+# Ensure Single Instance
+def ensure_single_instance():
+    lock_file = '/tmp/securepath_bot.lock'
+    try:
+        import fcntl
+        fp = open(lock_file, 'w')
+        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fp
+    except IOError:
+        print("Another instance of the bot is already running. Exiting.")
+        sys.exit(1)
+
+# Graceful Shutdown
 async def force_shutdown() -> None:
     """Force shutdown of all tasks."""
-    console.print(Panel.fit("Shutting down SecurePath AI Bot", border_style="red"))
-    
+    embed = Embed(
+        title="Bot Shutdown",
+        description="Shutting down SecurePath AI Bot.",
+        color=0xff0000,
+        timestamp=datetime.now(timezone.utc)
+    )
+    console.print(embed.description)
+
     loop = asyncio.get_event_loop()
     for task in asyncio.all_tasks(loop=loop):
         if task is not asyncio.current_task():
             task.cancel()
-    
+
     await asyncio.sleep(0.1)
-    
+
     if session:
         await session.close()
     if conn:
         await conn.close()
     if bot:
         await bot.close()
-    
+
     loop.stop()
 
 def handle_exit() -> None:
@@ -411,18 +603,26 @@ def quiet_exit() -> None:
     logging.shutdown()
     sys.exit(0)
 
+# Start the Bot
 async def start_bot() -> None:
+    global conn, session
+    import signal  # Fixing diagnostics by importing signal module
     try:
         logger.info("Setting up signal handlers")
         for sig in (signal.SIGTERM, signal.SIGINT):
             asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
 
-        logger.info("Calling startup function")
-        await startup()
-        
-        logger.info("Starting bot")
-        await bot.start(DISCORD_TOKEN)
-        
+        conn = TCPConnector(limit=10)
+        session = ClientSession(connector=conn)
+
+        send_periodic_stats.start()
+        reset_api_call_counter.start()
+
+        if not config.DISCORD_TOKEN:
+            logger.error("DISCORD_TOKEN is not set. Cannot start the bot.")
+            return
+
+        await bot.start(config.DISCORD_TOKEN)
     except discord.errors.HTTPException as e:
         logger.error(f"HTTP Exception: {e}")
     except asyncio.CancelledError:
@@ -430,52 +630,20 @@ async def start_bot() -> None:
     except Exception as e:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
     finally:
-        logger.info("Bot startup process completed")
         if session:
             await session.close()
         if conn:
             await conn.close()
 
-async def startup() -> None:
-    global conn, session
-    console.print(Panel.fit("Starting SecurePath AI Bot", border_style="green"))
-    logger.info("Bot startup initiated")
-    
-    log_instance_info()
-    
-    conn = TCPConnector(limit=10)
-    session = ClientSession(connector=conn)
-    
-    asyncio.create_task(delayed_start_periodic_stats())
-    
-    logger.info("Bot startup completed")
-
-async def delayed_start_periodic_stats() -> None:
-    await asyncio.sleep(10)
-    send_periodic_stats.start()
-    logger.info("Periodic stats sending started")
-
-def ensure_single_instance():
-    lock_file = '/tmp/securepath_bot.lock'
-    fp = open(lock_file, 'w')
-    try:
-        fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except IOError:
-        print("Another instance of the bot is already running. Exiting.")
-        sys.exit(1)
-    return fp
-
-lock_file_handle = ensure_single_instance()
-
 if __name__ == "__main__":
+    lock_file_handle = ensure_single_instance()
     try:
         asyncio.run(start_bot())
     except KeyboardInterrupt:
-        logger.info("Received keyboard interrupt")
+        logger.info("Bot shutdown requested by user")
     except Exception as e:
         logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}")
         logger.error(traceback.format_exc())
     finally:
-        logger.info("Bot shutting down")
         lock_file_handle.close()
         quiet_exit()
