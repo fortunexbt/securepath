@@ -78,6 +78,15 @@ if SUMMARY_CHANNEL_ID:
 else:
     SUMMARY_CHANNEL_ID = 0  # Default to 0 if not set; bot should handle this appropriately
 
+CHARTIST_CHANNEL_ID = os.getenv('CHARTIST_CHANNEL_ID')
+if CHARTIST_CHANNEL_ID:
+    try:
+        CHARTIST_CHANNEL_ID = int(CHARTIST_CHANNEL_ID)
+    except ValueError:
+        raise ValueError("CHARTIST_CHANNEL_ID must be an integer representing the Discord Channel ID.")
+else:
+    CHARTIST_CHANNEL_ID = 0  # Default to 0 if not set
+
 NEWS_CHANNEL_ID = os.getenv('NEWS_CHANNEL_ID')
 if NEWS_CHANNEL_ID:
     try:

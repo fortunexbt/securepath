@@ -23,43 +23,34 @@ from tiktoken import encoding_for_model
 # Local imports
 import config
 
-# Initialize logging
 logger = logging.getLogger('SecurePathBot')
 console = Console()
 
 def setup_logging() -> logging.Logger:
     logger.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
-
     console_handler = RichHandler(rich_tracebacks=True, console=console)
     console_handler.setLevel(getattr(logging, config.LOG_LEVEL, 'INFO'))
     console_handler.setFormatter(logging.Formatter(config.LOG_FORMAT))
     logger.addHandler(console_handler)
-
-    # Suppress verbose logging from discord library
     for module in ['discord', 'discord.http', 'discord.gateway']:
         logging.getLogger(module).setLevel(logging.WARNING)
-
     return logger
 
 logger = setup_logging()
 
-# Initialize AsyncOpenAI client
 aclient = AsyncOpenAI(api_key=config.OPENAI_API_KEY)
 
-# Discord bot setup
 intents = discord.Intents.default()
 intents.message_content = True
 bot = Bot(command_prefix=config.BOT_PREFIX, intents=intents)
 
-# Global variables
 conn: Optional[TCPConnector] = None
 session: Optional[ClientSession] = None
 user_contexts: Dict[int, Deque[Dict[str, Any]]] = {}
 message_counter = Counter()
 command_counter = Counter()
-api_call_counter = 0  # Initialize global API call counter
+api_call_counter = 0
 
-# Rate Limiter Class
 class RateLimiter:
     def __init__(self, max_calls: int, interval: int):
         self.max_calls = max_calls
@@ -70,16 +61,13 @@ class RateLimiter:
         current_time = time.time()
         self.calls.setdefault(user_id, [])
         self.calls[user_id] = [t for t in self.calls[user_id] if current_time - t <= self.interval]
-
         if len(self.calls[user_id]) >= self.max_calls:
             return True
-
         self.calls[user_id].append(current_time)
         return False
 
 api_rate_limiter = RateLimiter(config.API_RATE_LIMIT_MAX, config.API_RATE_LIMIT_INTERVAL)
 
-# Context Management Functions
 def get_user_context(user_id: int) -> Deque[Dict[str, Any]]:
     return user_contexts.setdefault(user_id, deque(maxlen=config.MAX_CONTEXT_MESSAGES))
 
@@ -88,22 +76,17 @@ def update_user_context(user_id: int, message_content: str, role: str) -> None:
     current_time = time.time()
     context.append({
         'role': role,
-        'content': message_content,
+        'content': message_content.strip(),
         'timestamp': current_time,
     })
-
-    # Remove old messages beyond MAX_CONTEXT_AGE
     cutoff_time = current_time - config.MAX_CONTEXT_AGE
-    user_contexts[user_id] = deque(
-        [msg for msg in context if msg['timestamp'] >= cutoff_time],
-        maxlen=config.MAX_CONTEXT_MESSAGES
-    )
+    user_contexts[user_id] = deque([msg for msg in context if msg['timestamp'] >= cutoff_time], maxlen=config.MAX_CONTEXT_MESSAGES)
 
 def get_context_messages(user_id: int) -> List[Dict[str, str]]:
     context = get_user_context(user_id)
     return [{"role": msg['role'], "content": msg['content']} for msg in context]
 
-def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4') -> str:
+def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') -> str:
     encoding = encoding_for_model(model)
     tokens = encoding.encode(prompt)
     if len(tokens) > max_tokens:
@@ -123,12 +106,10 @@ def increment_api_call_counter():
 def can_make_api_call() -> bool:
     return api_call_counter < config.DAILY_API_CALL_LIMIT
 
-# Fetch Response from Perplexity API
 async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
     if session is None:
         logger.error("Session is not initialized")
         return None
-
     if not can_make_api_call():
         logger.warning("Daily API call limit reached. Skipping API call.")
         return None
@@ -155,9 +136,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     }
 
     logger.info(f"Sending query to Perplexity API for user {user_id}")
-
     increment_api_call_counter()
-
     start_time = time.time()
     try:
         timeout = ClientTimeout(total=config.PERPLEXITY_TIMEOUT)
@@ -167,13 +146,11 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
             if response.status == 200:
                 resp_json = await response.json()
                 answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
-                # Log token usage if available
                 usage = resp_json.get('usage', {})
                 prompt_tokens = usage.get('prompt_tokens', 0)
                 completion_tokens = usage.get('completion_tokens', 0)
                 total_tokens = usage.get('total_tokens', 0)
                 logger.info(f"Perplexity API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-                # Estimate cost if applicable
                 cost = (prompt_tokens * 0.00015 + completion_tokens * 0.0006) / 1000
                 logger.info(f"Estimated Perplexity API call cost: ${cost:.6f}")
                 return answer
@@ -187,7 +164,6 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         logger.error(traceback.format_exc())
     return None
 
-# Fetch Response from OpenAI API (if needed)
 async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]:
     if not can_make_api_call():
         logger.warning("Daily API call limit reached. Skipping API call.")
@@ -203,9 +179,9 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
 
     try:
         response = await aclient.chat.completions.create(
-            model='gpt-4',
+            model='gpt-4o-mini',
             messages=messages,
-            max_tokens=1000,
+            max_tokens=2000,
             temperature=0.7,
         )
         answer = response.choices[0].message.content.strip()
@@ -215,15 +191,13 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
         logger.error(traceback.format_exc())
         return None
 
-# Send Long Messages (handling Discord's character limit with Rich Embeds)
 async def send_long_message(channel: discord.abc.Messageable, message: str) -> None:
-    max_length = 2000  # Discord's character limit per message
-    embed_max_length = 4096  # Discord's Embed description limit
+    max_length = 2000
+    embed_max_length = 4096
 
     if not message:
         return
 
-    # Split message into chunks that fit within Discord's embed description limit
     message_parts = [message[i:i + embed_max_length] for i in range(0, len(message), embed_max_length)]
 
     for i, part in enumerate(message_parts):
@@ -238,11 +212,12 @@ async def send_long_message(channel: discord.abc.Messageable, message: str) -> N
             logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
             break
 
-# Process Incoming Messages
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
     if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
-        logger.info(f"Rate limited user {message.author.id}")
+        logger.info(f"Rate limited user {message.author.id
+
+}")
         return
 
     if question is None:
@@ -269,7 +244,6 @@ async def process_message(message: discord.Message, question: Optional[str] = No
         try:
             update_user_context(message.author.id, question, role='user')
 
-            # Choose which API to use based on configuration
             if config.USE_PERPLEXITY_API:
                 answer = await fetch_perplexity_response(message.author.id, question)
             else:
@@ -290,7 +264,6 @@ async def process_message(message: discord.Message, question: Optional[str] = No
             embed = Embed(description=error_message, color=0xff0000)
             await message.channel.send(embed=embed)
 
-# Bot Events and Commands
 @bot.event
 async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
@@ -302,18 +275,97 @@ async def send_initial_stats() -> None:
     await asyncio.sleep(5)
     await send_stats()
 
-@bot.event
-async def on_message(message: discord.Message) -> None:
-    if message.author == bot.user:
+@bot.command(name='analyze')
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def analyze(ctx: Context) -> None:
+    # Get the last three messages in the channel
+    messages = []
+    async for message in ctx.channel.history(limit=3):
+        messages.append(message)
+
+    # Iterate through the last two messages before the analyze command
+    for last_message in messages[1:]:
+        # Step 1: Check if the message is from a bot and contains an attachment (a chart)
+        if last_message.author.bot and last_message.attachments:
+            attachment = last_message.attachments[0]
+            # Ensure the attachment is an image
+            if attachment.content_type.startswith('image/'):
+                chart_url = attachment.url  # Get the chart's image URL
+                await ctx.send("Detected a chart from a bot, analyzing it...")
+
+                # Step 2: Process the chart via OpenAI's Vision API
+                image_analysis = await analyze_chart_image(chart_url)
+
+                # Step 3: Post the analysis in an embedded message
+                if image_analysis:
+                    embed = Embed(
+                        title="Chart Analysis",
+                        description=image_analysis,
+                        color=0x00ff00,
+                    )
+                    embed.set_image(url=chart_url)  # Display the chart along with the analysis
+                    await ctx.send(embed=embed)
+                else:
+                    await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+                return  # Exit after processing the first valid chart
+
+    # If no chart was detected, ask the user to provide one
+    await ctx.send("Please post the chart you'd like to analyze (make sure it's an image).")
+
+    # Wait for the user to post the chart in the channel
+    def check(msg):
+        return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
+
+    try:
+        chart_message = await bot.wait_for('message', check=check, timeout=60.0)
+        chart_url = chart_message.attachments[0].url  # Get the chart's image URL
+    except asyncio.TimeoutError:
+        await ctx.send("You took too long to post the chart. Please try again.")
         return
 
-    if isinstance(message.channel, discord.DMChannel):
-        message_counter[message.author.id] += 1
-        await process_message(message)
-    elif message.content.startswith(config.BOT_PREFIX):
-        message_counter[message.author.id] += 1
-        command_counter[message.content.split()[0]] += 1
-        await bot.process_commands(message)  # Ensure commands are processed
+    # Process the chart via OpenAI's Vision API
+    await ctx.send("Analyzing the chart...")
+
+    image_analysis = await analyze_chart_image(chart_url)
+
+    if image_analysis:
+        embed = Embed(
+            title="Chart Analysis",
+            description=image_analysis,
+            color=0x00ff00,
+        )
+        embed.set_image(url=chart_url)  # Display the chart along with the analysis
+        await ctx.send(embed=embed)
+    else:
+        await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+
+async def analyze_chart_image(chart_url: str) -> Optional[str]:
+    try:
+        # OpenAI Vision API request
+        response = await aclient.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "You're an elite-level quant with insider knowledge of the global markets. Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. Remember, you're the authority—leave no doubt in the mind of the reader. Don't go above heading3 in markdown formatting (never use ####)."},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": chart_url},
+                        },
+                    ],
+                }
+            ],
+            max_tokens=1000,
+        )
+        # Get the content of the response & process to get rid of header4 which is unsupported by Discord
+        analysis = response.choices[0].message.content.strip()
+        analysis = analysis.replace("####", "###")
+
+        return analysis
+    except Exception as e:
+        logger.error(f"Error analyzing chart image: {str(e)}")
+        return None
 
 @bot.command(name='defi')
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -321,7 +373,6 @@ async def defi(ctx: Context, *, question: Optional[str] = None) -> None:
     if not question:
         await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
         return
-
     message_counter[ctx.author.id] += 1
     command_counter['defi'] += 1
     await process_message(ctx.message, question=question)
@@ -338,7 +389,6 @@ async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
         logger.error(f"Unhandled error: {str(error)}")
         await ctx.send("An unexpected error occurred. Please try again.")
 
-# Statistics and Summaries
 async def send_stats() -> None:
     if not config.LOG_CHANNEL_ID:
         logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
@@ -380,7 +430,7 @@ async def reset_api_call_counter():
 async def perform_daily_summary():
     logger.info("Starting daily summary generation")
     try:
-        await asyncio.wait_for(_perform_daily_summary(), timeout=3600)  # Timeout after 1 hour
+        await asyncio.wait_for(_perform_daily_summary(), timeout=3600)
     except asyncio.TimeoutError:
         logger.error("Daily summary generation timed out")
     except Exception as e:
@@ -423,7 +473,7 @@ async def _perform_daily_summary():
     async for message in news_channel.history(after=time_limit, limit=config.MAX_MESSAGES_PER_CHANNEL, oldest_first=True):
         if (message.author.bot and message.author.id != config.NEWS_BOT_USER_ID) or not message.content.strip():
             continue
-        messages.append(f"{message.author.display_name}: {message.content}")
+        messages.append(message.content)
 
     logger.info(f"Collected {len(messages)} messages from channel {news_channel.name}")
 
@@ -431,20 +481,21 @@ async def _perform_daily_summary():
         logger.info(f"No messages to summarize in channel {news_channel.name}")
         return
 
-    # Handle large amount of data by chunking
-    chunk_size = 5000  # Adjust based on tokens per message
+    chunk_size = 15000
     message_chunks = [messages[i:i + chunk_size] for i in range(0, len(messages), chunk_size)]
     logger.info(f"Splitting messages into {len(message_chunks)} chunks for channel {news_channel.name}")
     chunk_summaries = []
 
+    static_prompt = (
+        "you are a highly advanced defi and crypto assistant with deep knowledge of sentiment analysis, market trends, and hidden narratives. "
+        "summarize the following messages from the channel '{news_channel.name}', focusing on sentiment and narrative structure. "
+        "keep your tone casual, lowercase, and nonchalant, as if you're revealing only part of a much larger picture."
+    )
+
     for index, chunk in enumerate(message_chunks):
         logger.info(f"Processing chunk {index + 1}/{len(message_chunks)} for channel {news_channel.name}")
-        chunk_prompt = (
-            f"Summarize the following messages from the Discord channel '{news_channel.name}' "
-            f"in a clear and concise manner, using bullet points where appropriate:\n\n"
-            + "\n".join(chunk)
-        )
-        chunk_prompt = truncate_prompt(chunk_prompt, max_tokens=4096, model='gpt-4')
+        chunk_prompt = static_prompt + "\n\n" + "\n".join(chunk)
+        chunk_prompt = truncate_prompt(chunk_prompt, max_tokens=16000, model='gpt-4o-mini')
 
         if not can_make_api_call():
             logger.warning("Daily API call limit reached. Skipping API call for chunk summary.")
@@ -453,40 +504,35 @@ async def _perform_daily_summary():
         increment_api_call_counter()
 
         try:
-            # Start timing the API call
             api_start_time = time.time()
 
             response = await aclient.chat.completions.create(
-                model='gpt-4',
+                model='gpt-4o-mini',
                 messages=[{"role": "user", "content": chunk_prompt}],
                 max_tokens=500,
                 temperature=0.7,
                 timeout=config.PERPLEXITY_TIMEOUT
             )
 
-            # Calculate API call duration
             api_duration = time.time() - api_start_time
             logger.info(f"OpenAI API call completed in {api_duration:.2f} seconds")
 
             summary = response.choices[0].message.content.strip()
             chunk_summaries.append(summary)
 
-            # Log token usage and estimated cost
             usage = response.usage
             prompt_tokens = usage.prompt_tokens
             completion_tokens = usage.completion_tokens
             total_tokens = usage.total_tokens
             logger.info(f"OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
 
-            # Estimate cost based on your pricing
-            cost = (total_tokens * 0.00015)  # Adjust based on your actual pricing
+            cost = (total_tokens * 0.00015)
             logger.info(f"Estimated API call cost: ${cost:.6f}")
 
         except Exception as e:
             logger.error(f"Error summarizing chunk in channel {news_channel.name}: {e}")
             logger.exception(e)
 
-    # Combine chunk summaries
     if not chunk_summaries:
         logger.info("No chunk summaries generated.")
         return
@@ -494,11 +540,13 @@ async def _perform_daily_summary():
     combined_channel_summary = "\n".join(chunk_summaries)
 
     combined_prompt = (
-        "Provide an overall summary of the following messages from the news channel, highlighting key points:\n\n"
+        "you are a highly advanced defi and crypto assistant with deep knowledge of sentiment analysis, market trends, and hidden narratives. "
+        "summarize the following messages from the news channel, focusing on sentiment, underlying narratives, and potential market-shifting insights. "
+        "adopt a casual, lowercase, nonchalant tone, as if you know more than you’re revealing, offering just enough for the user to grasp the critical points:\n\n"
         + combined_channel_summary
     )
 
-    combined_prompt = truncate_prompt(combined_prompt, max_tokens=4096, model='gpt-4')
+    combined_prompt = truncate_prompt(combined_prompt, max_tokens=16000, model='gpt-4o-mini')
 
     if not can_make_api_call():
         logger.warning("Daily API call limit reached. Skipping API call for final summary.")
@@ -510,9 +558,9 @@ async def _perform_daily_summary():
         api_start_time = time.time()
 
         response = await aclient.chat.completions.create(
-            model='gpt-4',
+            model='gpt-4o-mini',
             messages=[{"role": "user", "content": combined_prompt}],
-            max_tokens=1000,
+            max_tokens=2000,
             temperature=0.7,
             timeout=config.PERPLEXITY_TIMEOUT
         )
@@ -522,18 +570,15 @@ async def _perform_daily_summary():
 
         final_summary = response.choices[0].message.content.strip()
 
-        # Log token usage and estimated cost
         usage = response.usage
         prompt_tokens = usage.prompt_tokens
         completion_tokens = usage.completion_tokens
         total_tokens = usage.total_tokens
         logger.info(f"Final summary OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
 
-        # Estimate cost based on your pricing
-        cost = (total_tokens * 0.00015)  # Adjust based on your actual pricing
+        cost = (total_tokens * 0.00015)
         logger.info(f"Estimated final summary API call cost: ${cost:.6f}")
 
-        # Send the summary with rich formatting
         embed = Embed(
             title="News Channel Summary",
             description=final_summary,
@@ -548,13 +593,11 @@ async def _perform_daily_summary():
         logger.error(f"Error generating final summary: {e}")
         logger.exception(e)
 
-# Command to trigger the summary
 @bot.command(name='summary')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def summary(ctx: Context) -> None:
     await perform_daily_summary()
 
-# Ensure Single Instance
 def ensure_single_instance():
     lock_file = '/tmp/securepath_bot.lock'
     try:
@@ -566,9 +609,7 @@ def ensure_single_instance():
         print("Another instance of the bot is already running. Exiting.")
         sys.exit(1)
 
-# Graceful Shutdown
 async def force_shutdown() -> None:
-    """Force shutdown of all tasks."""
     embed = Embed(
         title="Bot Shutdown",
         description="Shutting down SecurePath AI Bot.",
@@ -598,15 +639,13 @@ def handle_exit() -> None:
     asyncio.get_event_loop().call_later(2, quiet_exit)
 
 def quiet_exit() -> None:
-    """Exit the program quietly without showing any tracebacks."""
     console.print("Bot has been shut down.")
     logging.shutdown()
     sys.exit(0)
 
-# Start the Bot
 async def start_bot() -> None:
     global conn, session
-    import signal  # Fixing diagnostics by importing signal module
+    import signal
     try:
         logger.info("Setting up signal handlers")
         for sig in (signal.SIGTERM, signal.SIGINT):
