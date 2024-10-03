@@ -11,10 +11,7 @@ perplexity_cache/
 # Logs
 logs/
 
-# Virtual environment
 myenv/
-
-# Environment variables
 .env
 
 # Python cache files
@@ -40,3 +37,5 @@ Thumbs.db
 
 # Explicitly ignore backup Python files
 backup/*.py
+Proclife
+pyrightconfig.json
