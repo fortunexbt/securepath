@@ -215,9 +215,7 @@ async def send_long_message(channel: discord.abc.Messageable, message: str) -> N
 async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
     if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
-        logger.info(f"Rate limited user {message.author.id
-
-}")
+        logger.info(f"Rate limited user {message.author.id}")
         return
 
     if question is None:
