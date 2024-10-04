@@ -75,8 +75,8 @@ def update_user_context(user_id: int, message_content: str, role: str) -> None:
     context = get_user_context(user_id)
     current_time = time.time()
 
+    # Initialize context with system message if it's empty
     if not context:
-        # Initialize with system message
         context.append({
             'role': 'system',
             'content': config.SYSTEM_PROMPT.strip(),
@@ -84,34 +84,36 @@ def update_user_context(user_id: int, message_content: str, role: str) -> None:
         })
         logger.debug(f"Initialized context with system prompt for user {user_id}.")
 
-    # Determine the expected role based on the last role in the context
+    # Add user message directly after system message if context length is 1
+    if len(context) == 1 and role == 'user':
+        context.append({
+            'role': 'user',
+            'content': message_content.strip(),
+            'timestamp': current_time,
+        })
+        logger.debug(f"Appended first user message for user {user_id}: {message_content[:50]}...")
+        return
+
+    # Ensure roles alternate correctly for subsequent messages
     last_role = context[-1]['role']
-    if last_role in ['system', 'assistant']:
-        expected_role = 'user'
-    elif last_role == 'user':
-        expected_role = 'assistant'
+    if last_role == 'user' and role == 'assistant':
+        context.append({
+            'role': role,
+            'content': message_content.strip(),
+            'timestamp': current_time,
+        })
+        logger.debug(f"Appended assistant message for user {user_id}: {message_content[:50]}...")
+    elif last_role == 'assistant' and role == 'user':
+        context.append({
+            'role': role,
+            'content': message_content.strip(),
+            'timestamp': current_time,
+        })
+        logger.debug(f"Appended user message for user {user_id}: {message_content[:50]}...")
     else:
-        logger.warning(f"Unknown last role '{last_role}' in context for user {user_id}.")
-        return  # Skip appending
+        logger.warning(f"Role mismatch for user {user_id}: Expected alternate role, got {role}. Message skipped.")
 
-    if role != expected_role:
-        logger.warning(f"Incorrect role sequence for user {user_id}: Expected {expected_role}, got {role}. Message skipped.")
-        return  # Do not append the message if roles are out of order
-
-    # Append the current message
-    context.append({
-        'role': role,
-        'content': message_content.strip(),
-        'timestamp': current_time,
-    })
-    logger.debug(f"Appended {role} message for user {user_id}: {message_content[:50]}...")
-
-    # Log the current context for the user
-    logger.debug(f"Current context for user {user_id}:")
-    for idx, msg in enumerate(context):
-        logger.debug(f"  {idx + 1}. Role: {msg['role']}, Content: {msg['content'][:50]}...")
-
-    # Remove messages older than MAX_CONTEXT_AGE
+    # Remove old messages beyond the context's max age
     cutoff_time = current_time - config.MAX_CONTEXT_AGE
     user_contexts[user_id] = deque(
         [msg for msg in context if msg['timestamp'] >= cutoff_time],
@@ -194,6 +196,11 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     dynamic_system_prompt = f"Today is {current_date}. All information must be accurate up to this date. {config.SYSTEM_PROMPT}"
 
     context_messages = get_context_messages(user_id)
+
+    # Ensure the last message in context is from the user
+    if context_messages[-1]['role'] != 'user':
+        context_messages.append({"role": "user", "content": new_message.strip()})
+
     messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
 
     data = {
@@ -206,12 +213,6 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     logger.info(f"Sending query to Perplexity API for user {user_id}")
     increment_api_call_counter()
     start_time = time.time()
-
-    # Debugging: Log the messages being sent to the API
-    logger.debug("Constructed messages for Perplexity API:")
-    for idx, msg in enumerate(messages):
-        content_preview = msg['content'][:50] + '...' if len(msg['content']) > 50 else msg['content']
-        logger.debug(f"Message {idx}: Role={msg['role']}, Content={content_preview}")
 
     try:
         timeout = ClientTimeout(total=config.PERPLEXITY_TIMEOUT)
