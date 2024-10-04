@@ -574,7 +574,7 @@ async def reset_api_call_counter():
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
     if channel is None:
-        await ctx.send("Please specify a channel to summarize. Example: `!summary #market-analysis`")
+        await ctx.send("Please specify a channel to summarize. Example: !summary #market-analysis")
         return
 
     # Check if the bot has access to the specified channel
@@ -604,7 +604,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
         return
 
     # Define chunk size based on approximate characters (adjust as needed)
-    chunk_size = 3000  # Characters, adjust based on model's token limit
+    chunk_size = 6000  # Increased from 3000 to 6000 characters
     message_chunks = []
     current_chunk = ""
 
@@ -628,14 +628,18 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
             logger.warning("Daily API call limit reached. Skipping summarization.")
             break
 
-        prompt = f"Summarize the following messages from the channel '{channel.name}' in a clear and concise manner:\n\n{chunk}"
+        # Enhanced prompt for more detailed summaries
+        prompt = (
+            f"Summarize the following messages from the channel '{channel.name}' over the past 48 hours into a detailed narrative that captures the key discussions, trends, and insights. "
+            f"Ensure the summary is comprehensive and provides a cohesive understanding of the topics covered:\n\n{chunk}"
+        )
         prompt = truncate_prompt(prompt, max_tokens=15000, model='gpt-4o-mini')
 
         try:
             response = await aclient.chat.completions.create(
                 model='gpt-4o-mini',
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=500,
+                max_tokens=1500,  # Increased max_tokens for more detailed summaries
                 temperature=0.7,
             )
             summary = response.choices[0].message.content.strip()
@@ -651,16 +655,20 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
         logger.info(f"No summaries generated for channel {channel.name}")
         return
 
-    # Combine all chunk summaries into a final summary
-    final_summary = "\n".join(chunk_summaries)
-    final_prompt = f"Provide a concise summary of the following summaries:\n\n{final_summary}"
+    # Combine all chunk summaries into a single comprehensive summary
+    combined_summary = "\n\n".join(chunk_summaries)
+    final_prompt = (
+        "Provide a comprehensive and cohesive summary of the following detailed summaries. "
+        "The final summary should synthesize the information, highlighting overarching themes, key discussions, and significant insights from the past 48 hours:\n\n"
+        f"{combined_summary}"
+    )
     final_prompt = truncate_prompt(final_prompt, max_tokens=15000, model='gpt-4o-mini')
 
     try:
         response = await aclient.chat.completions.create(
             model='gpt-4o-mini',
             messages=[{"role": "user", "content": final_prompt}],
-            max_tokens=1000,
+            max_tokens=2000,  # Increased max_tokens for a more detailed final summary
             temperature=0.7,
         )
         final_summary = response.choices[0].message.content.strip()
