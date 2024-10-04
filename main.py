@@ -74,17 +74,88 @@ def get_user_context(user_id: int) -> Deque[Dict[str, Any]]:
 def update_user_context(user_id: int, message_content: str, role: str) -> None:
     context = get_user_context(user_id)
     current_time = time.time()
+
+    if not context:
+        # Initialize with system message
+        context.append({
+            'role': 'system',
+            'content': config.SYSTEM_PROMPT.strip(),
+            'timestamp': current_time,
+        })
+        logger.debug(f"Initialized context with system prompt for user {user_id}.")
+
+    # Determine the expected role based on the last role in the context
+    last_role = context[-1]['role']
+    if last_role in ['system', 'assistant']:
+        expected_role = 'user'
+    elif last_role == 'user':
+        expected_role = 'assistant'
+    else:
+        logger.warning(f"Unknown last role '{last_role}' in context for user {user_id}.")
+        return  # Skip appending
+
+    if role != expected_role:
+        logger.warning(f"Incorrect role sequence for user {user_id}: Expected {expected_role}, got {role}. Message skipped.")
+        return  # Do not append the message if roles are out of order
+
+    # Append the current message
     context.append({
         'role': role,
         'content': message_content.strip(),
         'timestamp': current_time,
     })
+    logger.debug(f"Appended {role} message for user {user_id}: {message_content[:50]}...")
+
+    # Log the current context for the user
+    logger.debug(f"Current context for user {user_id}:")
+    for idx, msg in enumerate(context):
+        logger.debug(f"  {idx + 1}. Role: {msg['role']}, Content: {msg['content'][:50]}...")
+
+    # Remove messages older than MAX_CONTEXT_AGE
     cutoff_time = current_time - config.MAX_CONTEXT_AGE
-    user_contexts[user_id] = deque([msg for msg in context if msg['timestamp'] >= cutoff_time], maxlen=config.MAX_CONTEXT_MESSAGES)
+    user_contexts[user_id] = deque(
+        [msg for msg in context if msg['timestamp'] >= cutoff_time],
+        maxlen=config.MAX_CONTEXT_MESSAGES
+    )
 
 def get_context_messages(user_id: int) -> List[Dict[str, str]]:
     context = get_user_context(user_id)
-    return [{"role": msg['role'], "content": msg['content']} for msg in context]
+    messages = [{"role": msg['role'], "content": msg['content']} for msg in context]
+
+    # Ensure the first message is a system message
+    if not messages or messages[0]['role'] != 'system':
+        messages.insert(0, {
+            "role": "system",
+            "content": config.SYSTEM_PROMPT.strip(),
+        })
+
+    # Ensure alternating roles correctly
+    cleaned_messages = [messages[0]]  # Start with system message
+    for i in range(1, len(messages)):
+        last_role = cleaned_messages[-1]['role']
+
+        # Determine the expected role based on the last role
+        if last_role in ['system', 'assistant']:
+            expected_role = 'user'
+        elif last_role == 'user':
+            expected_role = 'assistant'
+        else:
+            logger.warning(f"Unknown last role '{last_role}' in context.")
+            continue  # Skip unknown roles
+
+        if messages[i]['role'] == expected_role:
+            cleaned_messages.append(messages[i])
+        else:
+            logger.warning(f"Role mismatch at message {i}: Expected {expected_role}, got {messages[i]['role']}")
+            # Optionally, attempt to correct the role or skip the message
+            # For now, skip the message to maintain integrity
+
+    logger.debug("Final cleaned context messages:")
+    for idx, msg in enumerate(cleaned_messages):
+        content_preview = msg['content'][:50] + '...' if len(msg['content']) > 50 else msg['content']
+        logger.debug(f"Message {idx}: Role={msg['role']}, Content={content_preview}")
+
+    return cleaned_messages
 
 def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') -> str:
     encoding = encoding_for_model(model)
@@ -125,9 +196,6 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     context_messages = get_context_messages(user_id)
     messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
 
-    if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
-        messages.append({"role": "user", "content": new_message})
-
     data = {
         "model": "llama-3.1-sonar-large-128k-online",
         "messages": messages,
@@ -138,6 +206,13 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     logger.info(f"Sending query to Perplexity API for user {user_id}")
     increment_api_call_counter()
     start_time = time.time()
+
+    # Debugging: Log the messages being sent to the API
+    logger.debug("Constructed messages for Perplexity API:")
+    for idx, msg in enumerate(messages):
+        content_preview = msg['content'][:50] + '...' if len(msg['content']) > 50 else msg['content']
+        logger.debug(f"Message {idx}: Role={msg['role']}, Content={content_preview}")
+
     try:
         timeout = ClientTimeout(total=config.PERPLEXITY_TIMEOUT)
         async with session.post(config.PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
@@ -174,8 +249,6 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
 
     if not messages or messages[-1]['role'] != 'user' or messages[-1]['content'] != new_message:
         messages.append({"role": "user", "content": new_message})
-
-    prompt = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
 
     try:
         response = await aclient.chat.completions.create(
@@ -240,6 +313,10 @@ async def process_message(message: discord.Message, question: Optional[str] = No
 
     async with message.channel.typing():
         try:
+            # Preload context if in DM
+            if isinstance(message.channel, discord.DMChannel):
+                await preload_user_messages(message.author.id, message.channel)
+
             update_user_context(message.author.id, question, role='user')
 
             if config.USE_PERPLEXITY_API:
@@ -269,6 +346,56 @@ async def on_ready() -> None:
     log_instance_info()
     await send_initial_stats()
 
+    # Optional: Preload messages for active users if you have a way to track them
+    # Note: Discord does not provide a direct way to fetch all DM channels
+    # Consider implementing user tracking to preload contexts as needed
+
+@bot.event
+async def on_message(message: discord.Message) -> None:
+    if message.author.bot:
+        return  # Ignore bot messages
+
+    if isinstance(message.channel, discord.DMChannel):
+        # Preload the last 20 user and assistant messages
+        await preload_user_messages(message.author.id, message.channel)
+        # Process the message
+        await process_message(message)
+    else:
+        await bot.process_commands(message)  # Ensure commands are still processed
+
+async def preload_user_messages(user_id: int, channel: discord.DMChannel) -> None:
+    if user_id not in user_contexts:
+        messages = []
+        bot_user_id = bot.user.id  # Ensure this is obtained after the bot is ready
+
+        async for msg in channel.history(limit=100, oldest_first=True):
+            if msg.author.id == user_id:
+                messages.append({
+                    'role': 'user',
+                    'content': msg.content.strip(),
+                    'timestamp': msg.created_at.timestamp(),
+                })
+                logger.debug(f"Preloading user message: {msg.content[:50]}...")
+            elif msg.author.id == bot_user_id:
+                messages.append({
+                    'role': 'assistant',
+                    'content': msg.content.strip(),
+                    'timestamp': msg.created_at.timestamp(),
+                })
+                logger.debug(f"Preloading assistant message: {msg.content[:50]}...")
+
+            if len(messages) >= 20:
+                break
+
+        # Reverse to have oldest first
+        messages = messages[::-1]
+        context = deque(maxlen=config.MAX_CONTEXT_MESSAGES)
+        for msg in messages:
+            context.append(msg)
+
+        user_contexts[user_id] = context
+        logger.info(f"Preloaded {len(messages)} messages for user {user_id} in DMs.")
+
 async def send_initial_stats() -> None:
     await asyncio.sleep(5)
     await send_stats()
@@ -276,66 +403,76 @@ async def send_initial_stats() -> None:
 @bot.command(name='analyze')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
-    # Get the last three messages in the channel
-    messages = []
-    async for message in ctx.channel.history(limit=3):
-        messages.append(message)
+    chart_url = None
 
-    # Iterate through the last two messages before the analyze command
-    for last_message in messages[1:]:
-        # Step 1: Check if the message is from a bot and contains an attachment (a chart)
-        if last_message.author.bot and last_message.attachments:
-            attachment = last_message.attachments[0]
-            # Ensure the attachment is an image
-            if attachment.content_type.startswith('image/'):
-                chart_url = attachment.url  # Get the chart's image URL
-                await ctx.send("Detected a chart from a bot, analyzing it...")
-
-                # Step 2: Process the chart via OpenAI's Vision API with the optional user prompt
-                image_analysis = await analyze_chart_image(chart_url, user_prompt)
-
-                # Step 3: Post the analysis in an embedded message
-                if image_analysis:
-                    embed = Embed(
-                        title="Chart Analysis",
-                        description=image_analysis,
-                        color=0x00ff00,
-                    )
-                    embed.set_image(url=chart_url)  # Display the chart along with the analysis
-                    await ctx.send(embed=embed)
-                else:
-                    await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
-                return  # Exit after processing the first valid chart
-
-    # If no chart was detected, ask the user to provide one
-    await ctx.send("Please post the chart you'd like to analyze (make sure it's an image).")
-
-    # Wait for the user to post the chart in the channel
-    def check(msg):
-        return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
-
-    try:
-        chart_message = await bot.wait_for('message', check=check, timeout=60.0)
-        chart_url = chart_message.attachments[0].url  # Get the chart's image URL
-    except asyncio.TimeoutError:
-        await ctx.send("You took too long to post the chart. Please try again.")
-        return
-
-    # Process the chart via OpenAI's Vision API with the optional user prompt
-    await ctx.send("Analyzing the chart...")
-
-    image_analysis = await analyze_chart_image(chart_url, user_prompt)
-
-    if image_analysis:
-        embed = Embed(
-            title="Chart Analysis",
-            description=image_analysis,
-            color=0x00ff00,
-        )
-        embed.set_image(url=chart_url)  # Display the chart along with the analysis
-        await ctx.send(embed=embed)
+    # Check if the current message has an attachment
+    if ctx.message.attachments:
+        attachment = ctx.message.attachments[0]
+        if attachment.content_type and attachment.content_type.startswith('image/'):
+            chart_url = attachment.url  # Get the chart's image URL
     else:
-        await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+        # Get the last three messages in the channel
+        messages = []
+        async for message in ctx.channel.history(limit=3):
+            messages.append(message)
+
+        # Iterate through the last two messages before the analyze command
+        for last_message in messages[1:]:
+            # Step 1: Check if the message contains an attachment (a chart)
+            if last_message.attachments:
+                attachment = last_message.attachments[0]
+                # Ensure the attachment is an image
+                if attachment.content_type and attachment.content_type.startswith('image/'):
+                    chart_url = attachment.url  # Get the chart's image URL
+                    break
+
+    if chart_url:
+        await ctx.send("Detected a chart, analyzing it...")
+
+        # Step 2: Process the chart via OpenAI's Vision API with the optional user prompt
+        image_analysis = await analyze_chart_image(chart_url, user_prompt)
+
+        # Step 3: Post the analysis in an embedded message
+        if image_analysis:
+            embed = Embed(
+                title="Chart Analysis",
+                description=image_analysis,
+                color=0x00ff00,
+            )
+            embed.set_image(url=chart_url)  # Display the chart along with the analysis
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+    else:
+        # If no chart was detected, ask the user to provide one
+        await ctx.send("Please post the chart you'd like to analyze (make sure it's an image).")
+
+        # Wait for the user to post the chart in the channel
+        def check(msg):
+            return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
+
+        try:
+            chart_message = await bot.wait_for('message', check=check, timeout=60.0)
+            chart_url = chart_message.attachments[0].url  # Get the chart's image URL
+        except asyncio.TimeoutError:
+            await ctx.send("You took too long to post the chart. Please try again.")
+            return
+
+        # Process the chart via OpenAI's Vision API with the optional user prompt
+        await ctx.send("Analyzing the chart...")
+
+        image_analysis = await analyze_chart_image(chart_url, user_prompt)
+
+        if image_analysis:
+            embed = Embed(
+                title="Chart Analysis",
+                description=image_analysis,
+                color=0x00ff00,
+            )
+            embed.set_image(url=chart_url)  # Display the chart along with the analysis
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
 
 async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
     try:
@@ -373,14 +510,14 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         logger.error(f"Error analyzing chart image: {str(e)}")
         return None
 
-@bot.command(name='defi')
+@bot.command(name='ask')
 @commands.cooldown(1, 10, commands.BucketType.user)
-async def defi(ctx: Context, *, question: Optional[str] = None) -> None:
+async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     if not question:
-        await ctx.send("Please provide a question after the !defi command. Example: `!defi What is yield farming?`")
+        await ctx.send("Please provide a question after the !ask command. Example: !ask What is yield farming?")
         return
     message_counter[ctx.author.id] += 1
-    command_counter['defi'] += 1
+    command_counter['ask'] += 1
     await process_message(ctx.message, question=question)
 
 @bot.event
@@ -433,176 +570,137 @@ async def reset_api_call_counter():
     api_call_counter = 0
     logger.info("API call counter reset")
 
-async def perform_daily_summary():
-    logger.info("Starting daily summary generation")
-    try:
-        await asyncio.wait_for(_perform_daily_summary(), timeout=3600)
-    except asyncio.TimeoutError:
-        logger.error("Daily summary generation timed out")
-    except Exception as e:
-        logger.error(f"Unexpected error during daily summary generation: {e}")
-        logger.exception(e)
-    else:
-        logger.info("Completed daily summary generation")
-
-async def _perform_daily_summary():
-    if not can_make_api_call():
-        logger.warning("Daily API call limit reached. Skipping daily summary.")
+@bot.command(name='summary')
+@commands.cooldown(1, 10, commands.BucketType.user)
+async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
+    if channel is None:
+        await ctx.send("Please specify a channel to summarize. Example: `!summary #market-analysis`")
         return
 
-    if not config.SUMMARY_CHANNEL_ID:
-        logger.error("SUMMARY_CHANNEL_ID is not set. Cannot post the daily summary.")
+    # Check if the bot has access to the specified channel
+    if not channel.permissions_for(channel.guild.me).read_messages:
+        await ctx.send(f"I don't have permission to read messages in {channel.mention}.")
         return
 
-    summary_channel = bot.get_channel(config.SUMMARY_CHANNEL_ID)
-    if not summary_channel:
-        logger.error(f"Could not find the summary channel with ID {config.SUMMARY_CHANNEL_ID}")
-        return
+    await perform_channel_summary(ctx, channel)
 
-    if not config.NEWS_CHANNEL_ID:
-        logger.error("NEWS_CHANNEL_ID is not set. Cannot generate the summary.")
-        return
+async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) -> None:
+    logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
 
-    news_channel = bot.get_channel(config.NEWS_CHANNEL_ID)
-    if not news_channel:
-        logger.error(f"Could not find the news channel with ID {config.NEWS_CHANNEL_ID}")
-        return
+    await ctx.send(f"Generating summary for {channel.mention}... This may take a moment.")
 
-    time_limit = datetime.now(timezone.utc) - timedelta(hours=24)
+    time_limit = datetime.now(timezone.utc) - timedelta(hours=48)
     messages = []
 
-    permissions = news_channel.permissions_for(news_channel.guild.me)
-    if not permissions.read_messages or not permissions.read_message_history:
-        logger.warning(f"Missing permissions for channel: {news_channel.name}")
-        return
+    async for message in channel.history(after=time_limit, limit=None, oldest_first=True):
+        if message.content.strip():
+            messages.append(message.content)
 
-    async for message in news_channel.history(after=time_limit, limit=config.MAX_MESSAGES_PER_CHANNEL, oldest_first=True):
-        if (message.author.bot and message.author.id != config.NEWS_BOT_USER_ID) or not message.content.strip():
-            continue
-        messages.append(message.content)
-
-    logger.info(f"Collected {len(messages)} messages from channel {news_channel.name}")
+    logger.info(f"Collected {len(messages)} messages from channel {channel.name}")
 
     if not messages:
-        logger.info(f"No messages to summarize in channel {news_channel.name}")
+        await ctx.send(f"No messages to summarize in channel {channel.mention}.")
+        logger.info(f"No messages to summarize in channel {channel.name}")
         return
 
-    chunk_size = 15000
-    message_chunks = [messages[i:i + chunk_size] for i in range(0, len(messages), chunk_size)]
-    logger.info(f"Splitting messages into {len(message_chunks)} chunks for channel {news_channel.name}")
+    # Define chunk size based on approximate characters (adjust as needed)
+    chunk_size = 3000  # Characters, adjust based on model's token limit
+    message_chunks = []
+    current_chunk = ""
+
+    for msg in messages:
+        if len(current_chunk) + len(msg) + 1 > chunk_size:
+            message_chunks.append(current_chunk)
+            current_chunk = msg
+        else:
+            if current_chunk:
+                current_chunk += "\n" + msg
+            else:
+                current_chunk = msg
+    if current_chunk:
+        message_chunks.append(current_chunk)
+
+    logger.info(f"Split messages into {len(message_chunks)} chunks for summarization.")
+
     chunk_summaries = []
-
-    static_prompt = (
-        "you are a highly advanced defi and crypto assistant with deep knowledge of sentiment analysis, market trends, and hidden narratives. "
-        "summarize the following messages from the channel '{news_channel.name}', focusing on sentiment and narrative structure. "
-        "keep your tone casual, lowercase, and nonchalant, as if you're revealing only part of a much larger picture."
-    )
-
     for index, chunk in enumerate(message_chunks):
-        logger.info(f"Processing chunk {index + 1}/{len(message_chunks)} for channel {news_channel.name}")
-        chunk_prompt = static_prompt + "\n\n" + "\n".join(chunk)
-        chunk_prompt = truncate_prompt(chunk_prompt, max_tokens=16000, model='gpt-4o-mini')
-
         if not can_make_api_call():
-            logger.warning("Daily API call limit reached. Skipping API call for chunk summary.")
+            logger.warning("Daily API call limit reached. Skipping summarization.")
             break
 
-        increment_api_call_counter()
+        prompt = f"Summarize the following messages from the channel '{channel.name}' in a clear and concise manner:\n\n{chunk}"
+        prompt = truncate_prompt(prompt, max_tokens=15000, model='gpt-4o-mini')
 
         try:
-            api_start_time = time.time()
-
             response = await aclient.chat.completions.create(
                 model='gpt-4o-mini',
-                messages=[{"role": "user", "content": chunk_prompt}],
+                messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.7,
-                timeout=config.PERPLEXITY_TIMEOUT
             )
-
-            api_duration = time.time() - api_start_time
-            logger.info(f"OpenAI API call completed in {api_duration:.2f} seconds")
-
             summary = response.choices[0].message.content.strip()
             chunk_summaries.append(summary)
-
-            usage = response.usage
-            prompt_tokens = usage.prompt_tokens
-            completion_tokens = usage.completion_tokens
-            total_tokens = usage.total_tokens
-            logger.info(f"OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-
-            cost = (total_tokens * 0.00015)
-            logger.info(f"Estimated API call cost: ${cost:.6f}")
-
+            increment_api_call_counter()
+            logger.info(f"Summarized chunk {index + 1}/{len(message_chunks)}")
         except Exception as e:
-            logger.error(f"Error summarizing chunk in channel {news_channel.name}: {e}")
+            logger.error(f"Error summarizing chunk {index + 1}: {e}")
             logger.exception(e)
 
     if not chunk_summaries:
-        logger.info("No chunk summaries generated.")
+        await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
+        logger.info(f"No summaries generated for channel {channel.name}")
         return
 
-    combined_channel_summary = "\n".join(chunk_summaries)
-
-    combined_prompt = (
-        "you are a highly advanced defi and crypto assistant with deep knowledge of sentiment analysis, market trends, and hidden narratives. "
-        "summarize the following messages from the news channel, focusing on sentiment, underlying narratives, and potential market-shifting insights. "
-        "adopt a casual, lowercase, nonchalant tone, as if you know more than you’re revealing, offering just enough for the user to grasp the critical points:\n\n"
-        + combined_channel_summary
-    )
-
-    combined_prompt = truncate_prompt(combined_prompt, max_tokens=16000, model='gpt-4o-mini')
-
-    if not can_make_api_call():
-        logger.warning("Daily API call limit reached. Skipping API call for final summary.")
-        return
-
-    increment_api_call_counter()
+    # Combine all chunk summaries into a final summary
+    final_summary = "\n".join(chunk_summaries)
+    final_prompt = f"Provide a concise summary of the following summaries:\n\n{final_summary}"
+    final_prompt = truncate_prompt(final_prompt, max_tokens=15000, model='gpt-4o-mini')
 
     try:
-        api_start_time = time.time()
-
         response = await aclient.chat.completions.create(
             model='gpt-4o-mini',
-            messages=[{"role": "user", "content": combined_prompt}],
-            max_tokens=2000,
+            messages=[{"role": "user", "content": final_prompt}],
+            max_tokens=1000,
             temperature=0.7,
-            timeout=config.PERPLEXITY_TIMEOUT
         )
-
-        api_duration = time.time() - api_start_time
-        logger.info(f"Final summary OpenAI API call completed in {api_duration:.2f} seconds")
-
         final_summary = response.choices[0].message.content.strip()
+        increment_api_call_counter()
+        logger.info("Final summary generated successfully.")
 
-        usage = response.usage
-        prompt_tokens = usage.prompt_tokens
-        completion_tokens = usage.completion_tokens
-        total_tokens = usage.total_tokens
-        logger.info(f"Final summary OpenAI API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-
-        cost = (total_tokens * 0.00015)
-        logger.info(f"Estimated final summary API call cost: ${cost:.6f}")
-
+        # Create a visually appealing embed
         embed = Embed(
-            title="News Channel Summary",
+            title=f"📄 48-Hour Summary for #{channel.name}",
             description=final_summary,
-            color=0x00ff00,
+            color=0x1D82B6,  # Discord's blurple color
             timestamp=datetime.now(timezone.utc)
         )
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
-        await summary_channel.send(embed=embed)
-        logger.info("Summary posted successfully.")
+        embed.set_thumbnail(url=channel.guild.icon.url if channel.guild.icon else None)
+        embed.set_footer(text=f"Summary generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
+        # Handle embed length limitations
+        if len(embed.description) > 4096:
+            # Split the description into multiple embeds
+            parts = [embed.description[i:i+4096] for i in range(0, len(embed.description), 4096)]
+            for i, part in enumerate(parts):
+                temp_embed = Embed(
+                    title=f"📄 48-Hour Summary for #{channel.name} (Part {i+1})",
+                    description=part,
+                    color=0x1D82B6,
+                    timestamp=datetime.now(timezone.utc)
+                )
+                temp_embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+                temp_embed.set_thumbnail(url=channel.guild.icon.url if channel.guild.icon else None)
+                temp_embed.set_footer(text=f"Summary generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+                await ctx.send(embed=temp_embed)
+        else:
+            await ctx.send(embed=embed)
+
+        logger.info(f"Summary posted to channel {ctx.channel.name}")
     except Exception as e:
         logger.error(f"Error generating final summary: {e}")
         logger.exception(e)
-
-@bot.command(name='summary')
-@commands.cooldown(1, 10, commands.BucketType.user)
-async def summary(ctx: Context) -> None:
-    await perform_daily_summary()
+        await ctx.send(f"An error occurred while generating the summary for channel {channel.mention}.")
 
 def ensure_single_instance():
     lock_file = '/tmp/securepath_bot.lock'
@@ -617,7 +715,7 @@ def ensure_single_instance():
 
 async def force_shutdown() -> None:
     embed = Embed(
-        title="Bot Shutdown",
+        title="⚠️ Bot Shutdown",
         description="Shutting down SecurePath AI Bot.",
         color=0xff0000,
         timestamp=datetime.now(timezone.utc)

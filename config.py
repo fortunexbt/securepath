@@ -5,10 +5,17 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ---------------------------
+# System Prompt
+# ---------------------------
+SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT', 'You are a helpful assistant.')
+print(f"SYSTEM_PROMPT loaded: {SYSTEM_PROMPT[:60]}...")
+
+# ---------------------------
 # Discord Configuration
 # ---------------------------
 DISCORD_TOKEN = os.getenv('DISCORD_TOKEN')
 BOT_PREFIX = os.getenv('BOT_PREFIX', '!')
+print(f"DISCORD_TOKEN loaded: {'Yes' if DISCORD_TOKEN else 'No'}")
 
 # Owner's Discord User ID (used for privileged commands or bypassing certain restrictions)
 OWNER_ID = os.getenv('OWNER_ID')
@@ -25,11 +32,13 @@ else:
 # ---------------------------
 # OpenAI Configuration
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+print(f"OPENAI_API_KEY loaded: {'Yes' if OPENAI_API_KEY else 'No'}")
 
 # Perplexity AI Configuration
 PERPLEXITY_API_KEY = os.getenv('PERPLEXITY_API_KEY')
 PERPLEXITY_API_URL = os.getenv('PERPLEXITY_API_URL', 'https://api.perplexity.ai/chat/completions')
-PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', 30))  # in seconds
+PERPLEXITY_TIMEOUT = int(os.getenv('PERPLEXITY_TIMEOUT', '30'))  # in seconds
+print(f"PERPLEXITY_API_KEY loaded: {'Yes' if PERPLEXITY_API_KEY else 'No'}")
 
 # Flag to choose between Perplexity and OpenAI APIs
 USE_PERPLEXITY_API = os.getenv('USE_PERPLEXITY_API', 'True').lower() in ['true', '1', 't']
@@ -40,7 +49,6 @@ USE_PERPLEXITY_API = os.getenv('USE_PERPLEXITY_API', 'True').lower() in ['true',
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO').upper()
 LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 LOG_CHANNEL_ID = os.getenv('LOG_CHANNEL_ID')
-
 if LOG_CHANNEL_ID:
     try:
         LOG_CHANNEL_ID = int(LOG_CHANNEL_ID)
@@ -48,6 +56,7 @@ if LOG_CHANNEL_ID:
         raise ValueError("LOG_CHANNEL_ID must be an integer representing the Discord Channel ID.")
 else:
     LOG_CHANNEL_ID = 0  # Default to 0 if not set; bot should handle this appropriately
+print(f"LOG_CHANNEL_ID loaded: {LOG_CHANNEL_ID}")
 
 # ---------------------------
 # Bot Behavior Configuration
@@ -104,11 +113,6 @@ if NEWS_BOT_USER_ID:
         raise ValueError("NEWS_BOT_USER_ID must be an integer representing the Discord User ID.")
 else:
     NEWS_BOT_USER_ID = 0  # Default to 0 if not set; bot should handle this appropriately
-
-# ---------------------------
-# System Prompt
-# ---------------------------
-SYSTEM_PROMPT = os.getenv('SYSTEM_PROMPT')
 
 # ---------------------------
 # Ensure Required Configurations are Set
