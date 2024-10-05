@@ -19,9 +19,9 @@ from openai import AsyncOpenAI
 from rich.console import Console
 from rich.logging import RichHandler
 from tiktoken import encoding_for_model
-import random  # Added import for random
-from PIL import Image  # Added import for Pillow
-from io import BytesIO  # Added import for BytesIO
+import random
+from PIL import Image
+from io import BytesIO
 
 # Local imports
 import config
@@ -64,7 +64,7 @@ usage_data = {
     },
     'openai_gpt4o_mini': {
         'input_tokens': 0,
-        'cached_input_tokens': 0,
+        'cached_input_tokens': 0,  # New field for cached tokens
         'cost': 0.0,
     },
     'openai_gpt4o_mini_vision': {
@@ -86,8 +86,10 @@ class RateLimiter:
         self.calls.setdefault(user_id, [])
         self.calls[user_id] = [t for t in self.calls[user_id] if current_time - t <= self.interval]
         if len(self.calls[user_id]) >= self.max_calls:
+            logger.debug(f"User {user_id} is rate limited. {len(self.calls[user_id])} calls in the last {self.interval} seconds.")
             return True
         self.calls[user_id].append(current_time)
+        logger.debug(f"User {user_id} made an API call. Total calls in the last {self.interval} seconds: {len(self.calls[user_id])}")
         return False
 
 api_rate_limiter = RateLimiter(config.API_RATE_LIMIT_MAX, config.API_RATE_LIMIT_INTERVAL)
@@ -139,10 +141,14 @@ def update_user_context(user_id: int, message_content: str, role: str) -> None:
 
     # Remove old messages beyond the context's max age
     cutoff_time = current_time - config.MAX_CONTEXT_AGE
+    old_length = len(context)
     user_contexts[user_id] = deque(
         [msg for msg in context if msg['timestamp'] >= cutoff_time],
         maxlen=config.MAX_CONTEXT_MESSAGES
     )
+    new_length = len(user_contexts[user_id])
+    if new_length < old_length:
+        logger.debug(f"Removed {old_length - new_length} old messages from user {user_id}'s context.")
 
 def get_context_messages(user_id: int) -> List[Dict[str, str]]:
     context = get_user_context(user_id)
@@ -154,6 +160,7 @@ def get_context_messages(user_id: int) -> List[Dict[str, str]]:
             "role": "system",
             "content": config.SYSTEM_PROMPT.strip(),
         })
+        logger.debug("Inserted system prompt at the beginning of messages.")
 
     # Ensure alternating roles correctly
     cleaned_messages = [messages[0]]  # Start with system message
@@ -185,8 +192,10 @@ def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') ->
     encoding = encoding_for_model(model)
     tokens = encoding.encode(prompt)
     if len(tokens) > max_tokens:
-        tokens = tokens[-max_tokens:]
-    return encoding.decode(tokens)
+        truncated = encoding.decode(tokens[-max_tokens:])
+        logger.debug(f"Truncated prompt from {len(tokens)} to {max_tokens} tokens.")
+        return truncated
+    return prompt
 
 def log_instance_info() -> None:
     hostname = os.uname().nodename
@@ -204,7 +213,10 @@ def increment_token_cost(cost: float):
     logger.info(f"Total token cost: ${total_token_cost:.6f}")
 
 def can_make_api_call() -> bool:
-    return api_call_counter < config.DAILY_API_CALL_LIMIT
+    if api_call_counter >= config.DAILY_API_CALL_LIMIT:
+        logger.debug(f"API call limit reached: {api_call_counter}/{config.DAILY_API_CALL_LIMIT}")
+        return False
+    return True
 
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
 
@@ -214,7 +226,9 @@ def estimate_tokens(image_size_bytes: int) -> int:
     Adjust the TOKENS_PER_BYTE factor based on actual API behavior.
     """
     TOKENS_PER_BYTE = 1 / 100  # Example factor: 1 token per 100 bytes
-    return int(image_size_bytes * TOKENS_PER_BYTE)
+    estimated = int(image_size_bytes * TOKENS_PER_BYTE)
+    logger.debug(f"Estimated tokens based on image size ({image_size_bytes} bytes): {estimated} tokens")
+    return estimated
 
 async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
     if session is None:
@@ -256,7 +270,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         timeout = ClientTimeout(total=config.PERPLEXITY_TIMEOUT)
         async with session.post(config.PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
             elapsed_time = time.time() - start_time
-            logger.info(f"API request completed in {elapsed_time:.2f} seconds")
+            logger.info(f"Perplexity API request completed in {elapsed_time:.2f} seconds")
             if response.status == 200:
                 resp_json = await response.json()
                 answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
@@ -276,7 +290,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                 return answer
             else:
                 response_text = await response.text()
-                logger.error(f"API request failed with status {response.status}. Response: {response_text}")
+                logger.error(f"Perplexity API request failed with status {response.status}. Response: {response_text}")
     except asyncio.TimeoutError:
         logger.error(f"Request to Perplexity API timed out after {config.PERPLEXITY_TIMEOUT} seconds")
     except Exception as e:
@@ -307,29 +321,35 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
         # Access usage attributes correctly
         if hasattr(response, 'usage'):
             usage = response.usage
-            prompt_tokens = usage.prompt_tokens
-            completion_tokens = usage.completion_tokens
-            total_tokens = usage.total_tokens
+            prompt_tokens = usage.prompt_tokens if hasattr(usage, 'prompt_tokens') else 0
+            cached_tokens = usage.prompt_tokens_details.cached_tokens if hasattr(usage.prompt_tokens_details, 'cached_tokens') else 0
+            completion_tokens = usage.completion_tokens if hasattr(usage, 'completion_tokens') else 0
+            total_tokens = usage.total_tokens if hasattr(usage, 'total_tokens') else 0
         else:
             prompt_tokens = 0
+            cached_tokens = 0
             completion_tokens = 0
             total_tokens = 0
 
-        # Determine if the prompt was cached
-        # This requires the bot to track cached prompts. For simplicity, we'll assume no caching.
-        is_cached = False  # Replace with actual caching logic if implemented
+        # Determine if a cache hit occurred
+        is_cached = cached_tokens >= 1024  # As per OpenAI's caching, prompts >=1024 tokens can be cached
 
+        # Update usage data
         if is_cached:
-            usage_data['openai_gpt4o_mini']['cached_input_tokens'] += prompt_tokens
-            cost = (prompt_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.075)
+            usage_data['openai_gpt4o_mini']['cached_input_tokens'] += cached_tokens
+            # Calculate cost for cached tokens
+            cost = (cached_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.075)
+            logger.debug(f"Cache hit detected. Cached Tokens: {cached_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
         else:
             usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
+            # Calculate cost for uncached tokens
             cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
+            logger.debug(f"No cache hit. Prompt Tokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
 
         usage_data['openai_gpt4o_mini']['cost'] += cost
         increment_token_cost(cost)
 
-        logger.info(f"OpenAI GPT-4o-mini usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"OpenAI GPT-4o-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
         logger.info(f"Estimated OpenAI GPT-4o-mini API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
@@ -353,6 +373,7 @@ async def send_long_message(channel: discord.abc.Messageable, message: str) -> N
 
         try:
             await channel.send(embed=embed)
+            logger.debug(f"Sent message part {i + 1}/{len(message_parts)} to channel {channel.name}")
         except discord.errors.HTTPException as e:
             logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
             break
@@ -573,6 +594,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         attachment = ctx.message.attachments[0]
         if attachment.content_type and attachment.content_type.startswith('image/'):
             chart_url = attachment.url  # Get the chart's image URL
+            logger.debug(f"Image attachment detected: {chart_url}")
     else:
         # If in DMs, do not default to Perplexity; force a prompt for the image attachment
         if isinstance(ctx.channel, discord.DMChannel):
@@ -585,6 +607,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             try:
                 chart_message = await bot.wait_for('message', check=check, timeout=60.0)
                 chart_url = chart_message.attachments[0].url  # Get the chart's image URL
+                logger.debug(f"Image uploaded in DM: {chart_url}")
             except asyncio.TimeoutError:
                 await ctx.send("You took too long to post an image. Please try again.")
                 # Reset status to rotating after timeout
@@ -602,10 +625,12 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
                     attachment = last_message.attachments[0]
                     if attachment.content_type and attachment.content_type.startswith('image/'):
                         chart_url = attachment.url  # Get the chart's image URL
+                        logger.debug(f"Image found in recent channel messages: {chart_url}")
                         break
 
     if chart_url:
         await ctx.send("Detected a chart, analyzing it...")
+        logger.info(f"Chart URL detected: {chart_url}")
 
         # Step 2: Process the chart via OpenAI's Vision API with the optional user prompt
         image_analysis = await analyze_chart_image(chart_url, user_prompt)
@@ -619,6 +644,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             )
             embed.set_image(url=chart_url)  # Display the chart along with the analysis
             await ctx.send(embed=embed)
+            logger.info(f"Sent image analysis to channel {ctx.channel.name}")
 
             # Log interaction in LOG_CHANNEL_ID
             await log_interaction(
@@ -630,8 +656,10 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             )
         else:
             await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
+            logger.warning("Image analysis failed to return a response.")
     else:
         await ctx.send("No chart detected. Please attach an image to analyze.")
+        logger.warning("No image URL detected for analysis.")
 
     # Reset status to rotating after analysis
     await reset_status()
@@ -639,11 +667,13 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
 async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
     try:
         # Fetch the image
+        logger.debug(f"Fetching image from URL: {chart_url}")
         async with session.get(chart_url) as resp:
             if resp.status != 200:
-                logger.error(f"Failed to fetch image from URL: {chart_url}")
+                logger.error(f"Failed to fetch image from URL: {chart_url} with status {resp.status}")
                 return "Failed to fetch the image. Please ensure the URL is correct and accessible."
             image_bytes = await resp.read()
+            logger.debug(f"Fetched image size: {len(image_bytes)} bytes")
 
         # Check image size
         image_size_bytes = len(image_bytes)
@@ -651,16 +681,54 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
             logger.warning(f"Image size {image_size_bytes} bytes exceeds the maximum allowed size.")
             return "The submitted image is too large to analyze. Please provide an image smaller than 5 MB."
 
-        # Analyze image dimensions (optional)
+        # Open image with Pillow
         image = Image.open(BytesIO(image_bytes))
-        width, height = image.size
-        logger.debug(f"Image dimensions: {width}x{height}")
+        original_width, original_height = image.size
+        logger.debug(f"Original image dimensions: {original_width}x{original_height}")
 
-        # Estimate token usage based on image size
-        estimated_tokens = estimate_tokens(image_size_bytes)
-        logger.debug(f"Estimated tokens based on image size: {estimated_tokens}")
+        # Resize image to 1536x768 as per user example
+        resized_width, resized_height = 1536, 768
+        image = image.resize((resized_width, resized_height))
+        logger.debug(f"Resized image to: {resized_width}x{resized_height}")
 
-        # Base system prompt for the analysis
+        # Define tile size
+        tile_width, tile_height = 512, 512
+        tiles = []
+
+        # Calculate number of tiles in each dimension
+        num_tiles_x = resized_width // tile_width
+        num_tiles_y = resized_height // tile_height
+        logger.debug(f"Splitting image into tiles of {tile_width}x{tile_height} pixels")
+
+        for y in range(num_tiles_y):
+            for x in range(num_tiles_x):
+                left = x * tile_width
+                upper = y * tile_height
+                right = left + tile_width
+                lower = upper + tile_height
+                tile = image.crop((left, upper, right, lower))
+                tiles.append(tile)
+                logger.debug(f"Created tile {len(tiles)}: ({left}, {upper}, {right}, {lower})")
+
+        total_tiles = len(tiles)
+        logger.info(f"Total tiles created: {total_tiles}")
+
+        # Token calculation
+        base_tokens = 2833
+        tile_tokens_per_tile = 5667
+        total_tile_tokens = tile_tokens_per_tile * total_tiles
+        total_tokens = base_tokens + total_tile_tokens
+        logger.debug(f"Base tokens: {base_tokens}")
+        logger.debug(f"Tile tokens per tile: {tile_tokens_per_tile}")
+        logger.debug(f"Total tile tokens: {total_tile_tokens}")
+        logger.debug(f"Total tokens for image analysis: {total_tokens}")
+
+        # Calculate cost
+        cost_per_million_tokens = 0.15
+        cost = (total_tokens / 1_000_000) * cost_per_million_tokens
+        logger.debug(f"Calculated cost: ({total_tokens} / 1,000,000) * ${cost_per_million_tokens} = ${cost:.6f}")
+
+        # Prepare prompt
         base_prompt = (
             "You're an elite-level quant with insider knowledge of the global markets. "
             "Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. "
@@ -668,11 +736,10 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
             "Remember, you're the authority—leave no doubt in the mind of the reader. "
             "Don't go above heading3 in markdown formatting (never use ####)."
         )
-
-        # If a user prompt was provided, append it to the base prompt
         full_prompt = base_prompt
         if user_prompt:
             full_prompt += f" {user_prompt}"
+        logger.debug(f"Final prompt for vision API: {full_prompt[:100]}...")
 
         # OpenAI Vision API request with the combined prompt
         response = await aclient.chat.completions.create(
@@ -694,28 +761,29 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         # Get the content of the response & process to get rid of header4 which is unsupported by Discord
         analysis = response.choices[0].message.content.strip()
         analysis = analysis.replace("####", "###")
+        logger.debug(f"Received analysis from Vision API: {analysis[:100]}...")
 
-        # Update usage data based on estimated tokens
+        # Update usage data based on calculated tokens
         usage_data['openai_gpt4o_mini_vision']['requests'] += 1
-        usage_data['openai_gpt4o_mini_vision']['tokens'] += estimated_tokens
+        usage_data['openai_gpt4o_mini_vision']['tokens'] += total_tokens
         # Update average tokens per request
         vision = usage_data['openai_gpt4o_mini_vision']
         vision['average_tokens_per_request'] = (
-            (vision['average_tokens_per_request'] * (vision['requests'] - 1)) + estimated_tokens
+            (vision['average_tokens_per_request'] * (vision['requests'] - 1)) + total_tokens
         ) / vision['requests']
-        cost = estimated_tokens / 1_000_000 * 0.15  # $0.15 per 1M tokens
         usage_data['openai_gpt4o_mini_vision']['cost'] += cost
         increment_token_cost(cost)
 
-        logger.info(f"OpenAI GPT-4o-mini Vision usage: Tokens={estimated_tokens}")
+        logger.info(f"OpenAI GPT-4o-mini Vision usage: Tokens={total_tokens}")
         logger.info(f"Estimated OpenAI GPT-4o-mini Vision API call cost: ${cost:.6f}")
-        logger.debug(f"Updated usage data: {usage_data['openai_gpt4o_mini_vision']}")
+        logger.debug(f"Updated usage data for Vision: {usage_data['openai_gpt4o_mini_vision']}")
 
         return analysis
+
     except Exception as e:
-        logger.error(f"Error analyzing image: {str(e)}")
-        logger.exception(e)
-        return "An error occurred while analyzing the image. Please try again later."
+        logger.error(f"Error during image analysis: {str(e)}")
+        logger.error(traceback.format_exc())
+        return "An error occurred during image analysis. Please try again later."
 
 @bot.command(name='ask')
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -752,6 +820,7 @@ async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
     # Check if the bot has access to the specified channel
     if not channel.permissions_for(channel.guild.me).read_messages:
         await ctx.send(f"I don't have permission to read messages in {channel.mention}.")
+        logger.warning(f"Missing permissions to read messages in channel {channel.name}")
         # Reset status to rotating after permission error
         await reset_status()
         return
@@ -766,6 +835,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
     logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
 
     await ctx.send(f"Generating summary for {channel.mention}... This may take a moment.")
+    logger.debug(f"Sent initial summary generation message to channel {channel.name}")
 
     time_limit = datetime.now(timezone.utc) - timedelta(hours=48)
     messages = []
@@ -790,6 +860,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         if len(current_chunk) + len(msg) + 1 > chunk_size:
             message_chunks.append(current_chunk)
             current_chunk = msg
+            logger.debug(f"Created a new message chunk. Total chunks so far: {len(message_chunks)}")
         else:
             if current_chunk:
                 current_chunk += "\n" + msg
@@ -797,6 +868,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                 current_chunk = msg
     if current_chunk:
         message_chunks.append(current_chunk)
+        logger.debug(f"Added final message chunk. Total chunks: {len(message_chunks)}")
 
     logger.info(f"Split messages into {len(message_chunks)} chunks for summarization.")
 
@@ -812,6 +884,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             f"Ensure the summary is comprehensive and provides a cohesive understanding of the topics covered:\n\n{chunk}"
         )
         prompt = truncate_prompt(prompt, max_tokens=15000, model='gpt-4o-mini')
+        logger.debug(f"Prepared prompt for chunk {index + 1}: {prompt[:100]}...")
 
         try:
             response = await aclient.chat.completions.create(
@@ -828,9 +901,9 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             # Track token usage for OpenAI GPT-4o-mini
             if hasattr(response, 'usage'):
                 usage = response.usage
-                prompt_tokens = usage.prompt_tokens
-                completion_tokens = usage.completion_tokens
-                total_tokens = usage.total_tokens
+                prompt_tokens = usage.prompt_tokens if hasattr(usage, 'prompt_tokens') else 0
+                completion_tokens = usage.completion_tokens if hasattr(usage, 'completion_tokens') else 0
+                total_tokens = usage.total_tokens if hasattr(usage, 'total_tokens') else 0
             else:
                 prompt_tokens = 0
                 completion_tokens = 0
@@ -848,7 +921,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
 
         except Exception as e:
             logger.error(f"Error summarizing chunk {index + 1}: {e}")
-            logger.exception(e)
+            logger.error(traceback.format_exc())
 
     if not chunk_summaries:
         await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
@@ -863,6 +936,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         f"{combined_summary}"
     )
     final_prompt = truncate_prompt(final_prompt, max_tokens=15000, model='gpt-4o-mini')
+    logger.debug(f"Prepared final prompt for comprehensive summary: {final_prompt[:100]}...")
 
     try:
         response = await aclient.chat.completions.create(
@@ -878,9 +952,9 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         # Track token usage for OpenAI GPT-4o-mini
         if hasattr(response, 'usage'):
             usage = response.usage
-            prompt_tokens = usage.prompt_tokens
-            completion_tokens = usage.completion_tokens
-            total_tokens = usage.total_tokens
+            prompt_tokens = usage.prompt_tokens if hasattr(usage, 'prompt_tokens') else 0
+            completion_tokens = usage.completion_tokens if hasattr(usage, 'completion_tokens') else 0
+            total_tokens = usage.total_tokens if hasattr(usage, 'total_tokens') else 0
         else:
             prompt_tokens = 0
             completion_tokens = 0
@@ -922,8 +996,10 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                 temp_embed.set_thumbnail(url=channel.guild.icon.url if channel.guild.icon else None)
                 temp_embed.set_footer(text=f"Summary generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 await ctx.send(embed=temp_embed)
+                logger.debug(f"Sent summary part {i + 1}/{len(parts)} to channel {channel.name}")
         else:
             await ctx.send(embed=embed)
+            logger.debug(f"Sent complete summary to channel {channel.name}")
 
         logger.info(f"Summary posted to channel {ctx.channel.name}")
 
@@ -937,7 +1013,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         )
     except Exception as e:
         logger.error(f"Error generating final summary: {e}")
-        logger.exception(e)
+        logger.error(traceback.format_exc())
         await ctx.send(f"An error occurred while generating the summary for channel {channel.mention}.")
 
 def ensure_single_instance():
@@ -946,8 +1022,10 @@ def ensure_single_instance():
         import fcntl
         fp = open(lock_file, 'w')
         fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        logger.debug(f"Acquired lock on {lock_file}")
         return fp
     except IOError:
+        logger.error("Another instance of the bot is already running. Exiting.")
         print("Another instance of the bot is already running. Exiting.")
         sys.exit(1)
 
@@ -969,10 +1047,13 @@ async def force_shutdown() -> None:
 
     if session:
         await session.close()
+        logger.debug("Closed aiohttp session.")
     if conn:
         await conn.close()
+        logger.debug("Closed aiohttp connector.")
     if bot:
         await bot.close()
+        logger.debug("Closed Discord bot.")
 
     loop.stop()
 
@@ -1015,8 +1096,10 @@ async def start_bot() -> None:
     finally:
         if session:
             await session.close()
+            logger.debug("Closed aiohttp session during shutdown.")
         if conn:
             await conn.close()
+            logger.debug("Closed aiohttp connector during shutdown.")
 
 # **Logging for All Commands Starts Here**
 
@@ -1047,6 +1130,13 @@ async def send_stats() -> None:
         inline=False
     )
 
+    # Include Cached Input Tokens
+    embed.add_field(
+        name="OpenAI GPT-4o-mini Cached Tokens",
+        value=f"{usage_data['openai_gpt4o_mini']['cached_input_tokens']}",
+        inline=True
+    )
+
     top_users = []
     for user_id, count in message_counter.most_common(5):
         user = bot.get_user(user_id)
@@ -1056,12 +1146,16 @@ async def send_stats() -> None:
     embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet", inline=False)
     embed.timestamp = datetime.now(timezone.utc)
 
-    await channel.send(embed=embed)
-    logger.info(f"Stats sent to log channel: {channel.name}")
+    try:
+        await channel.send(embed=embed)
+        logger.info(f"Stats sent to log channel: {channel.name}")
+    except discord.errors.HTTPException as e:
+        logger.error(f"Failed to send stats embed: {str(e)}")
 
 @tasks.loop(hours=12)
 async def send_periodic_stats() -> None:
     await send_stats()
+    logger.debug("Periodic stats sent.")
 
 @tasks.loop(hours=24)
 async def reset_api_call_counter():
@@ -1121,6 +1215,37 @@ async def token_usage(ctx: Context) -> None:
 
     await ctx.send(embed=embed)
     logger.info(f"Token usage requested by admin user {ctx.author.id}")
+
+@bot.command(name='cache_stats')
+@commands.has_permissions(administrator=True)
+async def cache_stats(ctx: Context) -> None:
+    """
+    Admin-only command to display cache hit rate.
+    Usage: !cache_stats
+    """
+    if ctx.author.id != config.OWNER_ID:
+        await ctx.send("You do not have permission to use this command.")
+        logger.warning(f"Unauthorized cache_stats command attempt by user {ctx.author.id}")
+        return
+
+    cache_hit_rate = calculate_cache_hit_rate()
+    embed = Embed(title="📊 Cache Hit Rate", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
+    embed.add_field(name="OpenAI GPT-4o-mini Cache Hit Rate", value=f"{cache_hit_rate:.2f}%", inline=False)
+    await ctx.send(embed=embed)
+    logger.info(f"Cache hit rate requested by admin user {ctx.author.id}")
+
+def calculate_cache_hit_rate() -> float:
+    """
+    Calculates the cache hit rate based on cached tokens.
+    """
+    total_cached = usage_data['openai_gpt4o_mini']['cached_input_tokens']
+    total_input = usage_data['openai_gpt4o_mini']['input_tokens'] + total_cached
+    if total_input == 0:
+        logger.debug("No input tokens to calculate cache hit rate.")
+        return 0.0
+    hit_rate = (total_cached / total_input) * 100
+    logger.debug(f"Calculated cache hit rate: {hit_rate:.2f}%")
+    return hit_rate
 
 # **End of Logging for All Commands**
 
