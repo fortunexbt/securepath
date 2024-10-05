@@ -1,3 +1,5 @@
+# main.py
+
 import asyncio
 import json
 import logging
@@ -340,12 +342,14 @@ async def process_message(message: discord.Message, question: Optional[str] = No
             await message.channel.send(embed=embed)
 
 # **Rich Presence/Status Integration Starts Here**
+
+# Define a list of engaging status messages
 status_messages = [
-    "BTC charts 📊",
+    "the BTC chart 📊",
     "DeFi trends 📈",
     "questions ❓",
     "SecurePath 🛡️",
-    "your commands 👀"
+    "your commands... 👀"
 ]
 
 # Define the change_status task with a 15-second interval
@@ -363,7 +367,8 @@ async def reset_status():
     change_status.start()
     logger.debug("Status rotation restarted.")
 
-# Start the change_status task when the bot is ready
+# **End of Rich Presence/Status Integration**
+
 @bot.event
 async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
@@ -379,8 +384,6 @@ async def on_ready() -> None:
     # Optional: Preload messages for active users if you have a way to track them
     # Note: Discord does not provide a direct way to fetch all DM channels
     # Consider implementing user tracking to preload contexts as needed
-
-# **End of Rich Presence/Status Integration**
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
@@ -436,7 +439,7 @@ async def send_initial_stats() -> None:
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
     # Update status to reflect analyzing action
-    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="analyzing a chart..."))
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="analysis on a chart..."))
     logger.debug("Status updated to: analyzing a chart...")
 
     chart_url = None
@@ -561,7 +564,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     # Update status to reflect active listening
-    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="answering a question..."))
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="a question..."))
     logger.debug("Status updated to: answering a question...")
 
     if not question:
@@ -575,56 +578,6 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
 
     # Reset status to rotating after answering
     await reset_status()
-
-@bot.event
-async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
-    if isinstance(error, commands.CommandOnCooldown):
-        if ctx.author.id != config.OWNER_ID:
-            await ctx.send(f"This command is on cooldown. Please try again in {error.retry_after:.2f} seconds.")
-    elif isinstance(error, commands.CommandInvokeError):
-        logger.error(f"Command invoke error: {str(error.original)}")
-        await ctx.send("An error occurred while processing your command. Please try again.")
-    else:
-        logger.error(f"Unhandled error: {str(error)}")
-        await ctx.send("An unexpected error occurred. Please try again.")
-
-async def send_stats() -> None:
-    if not config.LOG_CHANNEL_ID:
-        logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
-        return
-
-    channel = bot.get_channel(config.LOG_CHANNEL_ID)
-    if not channel:
-        logger.debug(f"Could not find log channel with ID {config.LOG_CHANNEL_ID}")
-        return
-
-    embed = Embed(title="Bot Statistics", color=0x00ff00)
-    embed.add_field(name="Total Messages", value=sum(message_counter.values()), inline=True)
-    embed.add_field(name="Unique Users", value=len(message_counter), inline=True)
-    embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
-    embed.add_field(name="API Calls Made", value=api_call_counter, inline=True)
-
-    top_users = []
-    for user_id, count in message_counter.most_common(5):
-        user = bot.get_user(user_id)
-        username = user.name if user else f"Unknown User ({user_id})"
-        top_users.append(f"{username}: {count}")
-
-    embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet", inline=False)
-    embed.timestamp = datetime.now(timezone.utc)
-
-    await channel.send(embed=embed)
-    logger.info(f"Stats sent to log channel: {channel.name}")
-
-@tasks.loop(hours=24)
-async def send_periodic_stats() -> None:
-    await send_stats()
-
-@tasks.loop(hours=24)
-async def reset_api_call_counter():
-    global api_call_counter
-    api_call_counter = 0
-    logger.info("API call counter reset")
 
 @bot.command(name='summary')
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -671,7 +624,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
         return
 
     # Define chunk size based on approximate characters (adjust as needed)
-    chunk_size = 6000  # Increased from 3000 to 6000 characters
+    chunk_size = 6000
     message_chunks = []
     current_chunk = ""
 
@@ -854,6 +807,78 @@ async def start_bot() -> None:
             await conn.close()
 
 # **Rich Presence/Status Integration Ends Here**
+
+# **Logging for All Commands Starts Here**
+
+@bot.event
+async def on_command(ctx: Context) -> None:
+    """
+    Event triggered when a command is successfully invoked.
+    Logs the command details to LOG_CHANNEL_ID.
+    """
+    log_channel = bot.get_channel(config.LOG_CHANNEL_ID)
+    if not log_channel:
+        logger.warning(f"Log channel with ID {config.LOG_CHANNEL_ID} not found.")
+        return
+
+    embed = Embed(
+        title="🔧 Command Executed",
+        color=0x1D82B6,
+        timestamp=datetime.now(timezone.utc)
+    )
+    embed.add_field(name="Command", value=ctx.command.name, inline=True)
+    embed.add_field(name="User", value=f"{ctx.author} (ID: {ctx.author.id})", inline=True)
+
+    if isinstance(ctx.channel, discord.DMChannel):
+        embed.add_field(name="Channel", value="Direct Message", inline=True)
+    else:
+        embed.add_field(name="Channel", value=f"{ctx.channel} (ID: {ctx.channel.id})", inline=True)
+        embed.add_field(name="Guild", value=f"{ctx.guild.name} (ID: {ctx.guild.id})", inline=True)
+
+    embed.set_footer(text=f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+    await log_channel.send(embed=embed)
+    logger.debug(f"Logged command '{ctx.command.name}' executed by {ctx.author}.")
+
+# **End of Logging for All Commands**
+
+async def send_stats() -> None:
+    if not config.LOG_CHANNEL_ID:
+        logger.debug("LOG_CHANNEL_ID is not set, skipping stats send")
+        return
+
+    channel = bot.get_channel(config.LOG_CHANNEL_ID)
+    if not channel:
+        logger.debug(f"Could not find log channel with ID {config.LOG_CHANNEL_ID}")
+        return
+
+    embed = Embed(title="Bot Statistics", color=0x00ff00)
+    embed.add_field(name="Total Messages", value=sum(message_counter.values()), inline=True)
+    embed.add_field(name="Unique Users", value=len(message_counter), inline=True)
+    embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
+    embed.add_field(name="API Calls Made", value=api_call_counter, inline=True)
+
+    top_users = []
+    for user_id, count in message_counter.most_common(5):
+        user = bot.get_user(user_id)
+        username = user.name if user else f"Unknown User ({user_id})"
+        top_users.append(f"{username}: {count}")
+
+    embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet", inline=False)
+    embed.timestamp = datetime.now(timezone.utc)
+
+    await channel.send(embed=embed)
+    logger.info(f"Stats sent to log channel: {channel.name}")
+
+@tasks.loop(hours=24)
+async def send_periodic_stats() -> None:
+    await send_stats()
+
+@tasks.loop(hours=24)
+async def reset_api_call_counter():
+    global api_call_counter
+    api_call_counter = 0
+    logger.info("API call counter reset")
 
 # Start the bot
 if __name__ == "__main__":
