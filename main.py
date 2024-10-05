@@ -20,6 +20,8 @@ from rich.console import Console
 from rich.logging import RichHandler
 from tiktoken import encoding_for_model
 import random  # Added import for random
+from PIL import Image  # Added import for Pillow
+from io import BytesIO  # Added import for BytesIO
 
 # Local imports
 import config
@@ -69,6 +71,7 @@ usage_data = {
         'requests': 0,
         'tokens': 0,
         'cost': 0.0,
+        'average_tokens_per_request': 0.0,  # New field for tracking average tokens
     }
 }
 
@@ -202,6 +205,16 @@ def increment_token_cost(cost: float):
 
 def can_make_api_call() -> bool:
     return api_call_counter < config.DAILY_API_CALL_LIMIT
+
+MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
+
+def estimate_tokens(image_size_bytes: int) -> int:
+    """
+    Estimate the number of tokens based on image size in bytes.
+    Adjust the TOKENS_PER_BYTE factor based on actual API behavior.
+    """
+    TOKENS_PER_BYTE = 1 / 100  # Example factor: 1 token per 100 bytes
+    return int(image_size_bytes * TOKENS_PER_BYTE)
 
 async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
     if session is None:
@@ -486,22 +499,28 @@ async def on_ready() -> None:
         change_status.start()
         logger.info("Started rotating status messages.")
 
-    # Optional: Preload messages for active users if you have a way to track them
-    # Note: Discord does not provide a direct way to fetch all DM channels
-    # Consider implementing user tracking to preload contexts as needed
+    # Start the periodic stats and reset tasks
+    if not send_periodic_stats.is_running():
+        send_periodic_stats.start()
+        logger.info("Started periodic stats task.")
+
+    if not reset_api_call_counter.is_running():
+        reset_api_call_counter.start()
+        logger.info("Started API call counter reset task.")
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
     if message.author.bot:
         return  # Ignore bot messages
 
+    await bot.process_commands(message)  # Process commands first
+
     if isinstance(message.channel, discord.DMChannel):
         # Preload the last 20 user and assistant messages
         await preload_user_messages(message.author.id, message.channel)
-        # Process the message
-        await process_message(message)
-    else:
-        await bot.process_commands(message)  # Ensure commands are still processed
+        # If the message is not a command, process it
+        if not message.content.startswith(config.BOT_PREFIX):
+            await process_message(message)
 
 async def preload_user_messages(user_id: int, channel: discord.DMChannel) -> None:
     if user_id not in user_contexts:
@@ -555,20 +574,35 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         if attachment.content_type and attachment.content_type.startswith('image/'):
             chart_url = attachment.url  # Get the chart's image URL
     else:
-        # Get the last three messages in the channel
-        messages = []
-        async for message in ctx.channel.history(limit=3):
-            messages.append(message)
+        # If in DMs, do not default to Perplexity; force a prompt for the image attachment
+        if isinstance(ctx.channel, discord.DMChannel):
+            await ctx.send("Please post the image you'd like to analyze.")
 
-        # Iterate through the last two messages before the analyze command
-        for last_message in messages[1:]:
-            # Step 1: Check if the message contains an attachment (a chart)
-            if last_message.attachments:
-                attachment = last_message.attachments[0]
-                # Ensure the attachment is an image
-                if attachment.content_type and attachment.content_type.startswith('image/'):
-                    chart_url = attachment.url  # Get the chart's image URL
-                    break
+            # Wait for the user to post the chart in the channel
+            def check(msg):
+                return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
+
+            try:
+                chart_message = await bot.wait_for('message', check=check, timeout=60.0)
+                chart_url = chart_message.attachments[0].url  # Get the chart's image URL
+            except asyncio.TimeoutError:
+                await ctx.send("You took too long to post an image. Please try again.")
+                # Reset status to rotating after timeout
+                await reset_status()
+                return
+        else:
+            # For non-DM channels, check the last few messages for a chart
+            messages = []
+            async for message in ctx.channel.history(limit=3):
+                messages.append(message)
+
+            # Iterate through the last two messages before the analyze command
+            for last_message in messages[1:]:
+                if last_message.attachments:
+                    attachment = last_message.attachments[0]
+                    if attachment.content_type and attachment.content_type.startswith('image/'):
+                        chart_url = attachment.url  # Get the chart's image URL
+                        break
 
     if chart_url:
         await ctx.send("Detected a chart, analyzing it...")
@@ -585,46 +619,47 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             )
             embed.set_image(url=chart_url)  # Display the chart along with the analysis
             await ctx.send(embed=embed)
+
+            # Log interaction in LOG_CHANNEL_ID
+            await log_interaction(
+                user=ctx.author,
+                channel=ctx.channel,
+                command='analyze',
+                user_input=user_prompt or 'No additional prompt provided',
+                bot_response=image_analysis[:1024]  # Truncate the bot response
+            )
         else:
             await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
     else:
-        # If no chart was detected, ask the user to provide one
-        await ctx.send("Please post the image you'd like to analyze.")
-
-        # Wait for the user to post the chart in the channel
-        def check(msg):
-            return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
-
-        try:
-            chart_message = await bot.wait_for('message', check=check, timeout=60.0)
-            chart_url = chart_message.attachments[0].url  # Get the chart's image URL
-        except asyncio.TimeoutError:
-            await ctx.send("You took too long to post an image. Please try again.")
-            # Reset status to rotating after timeout
-            await reset_status()
-            return
-
-        # Process the chart via OpenAI's Vision API with the optional user prompt
-        await ctx.send("Analyzing... This may take a moment.")
-
-        image_analysis = await analyze_chart_image(chart_url, user_prompt)
-
-        if image_analysis:
-            embed = Embed(
-                title="Chart Analysis",
-                description=image_analysis,
-                color=0x00ff00,
-            )
-            embed.set_image(url=chart_url)  # Display the chart along with the analysis
-            await ctx.send(embed=embed)
-        else:
-            await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
+        await ctx.send("No chart detected. Please attach an image to analyze.")
 
     # Reset status to rotating after analysis
     await reset_status()
 
 async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
     try:
+        # Fetch the image
+        async with session.get(chart_url) as resp:
+            if resp.status != 200:
+                logger.error(f"Failed to fetch image from URL: {chart_url}")
+                return "Failed to fetch the image. Please ensure the URL is correct and accessible."
+            image_bytes = await resp.read()
+
+        # Check image size
+        image_size_bytes = len(image_bytes)
+        if image_size_bytes > MAX_IMAGE_SIZE_BYTES:
+            logger.warning(f"Image size {image_size_bytes} bytes exceeds the maximum allowed size.")
+            return "The submitted image is too large to analyze. Please provide an image smaller than 5 MB."
+
+        # Analyze image dimensions (optional)
+        image = Image.open(BytesIO(image_bytes))
+        width, height = image.size
+        logger.debug(f"Image dimensions: {width}x{height}")
+
+        # Estimate token usage based on image size
+        estimated_tokens = estimate_tokens(image_size_bytes)
+        logger.debug(f"Estimated tokens based on image size: {estimated_tokens}")
+
         # Base system prompt for the analysis
         base_prompt = (
             "You're an elite-level quant with insider knowledge of the global markets. "
@@ -660,20 +695,27 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         analysis = response.choices[0].message.content.strip()
         analysis = analysis.replace("####", "###")
 
-        # For Vision, assume fixed tokens per request as per the user's example
-        # Total tokens: 36835
+        # Update usage data based on estimated tokens
         usage_data['openai_gpt4o_mini_vision']['requests'] += 1
-        usage_data['openai_gpt4o_mini_vision']['tokens'] += 36835
-        cost = 36835 / 1_000_000 * 0.15  # $0.15 per 1M tokens
+        usage_data['openai_gpt4o_mini_vision']['tokens'] += estimated_tokens
+        # Update average tokens per request
+        vision = usage_data['openai_gpt4o_mini_vision']
+        vision['average_tokens_per_request'] = (
+            (vision['average_tokens_per_request'] * (vision['requests'] - 1)) + estimated_tokens
+        ) / vision['requests']
+        cost = estimated_tokens / 1_000_000 * 0.15  # $0.15 per 1M tokens
         usage_data['openai_gpt4o_mini_vision']['cost'] += cost
         increment_token_cost(cost)
 
-        logger.info(f"OpenAI GPT-4o-mini Vision usage: Tokens={36835}")
+        logger.info(f"OpenAI GPT-4o-mini Vision usage: Tokens={estimated_tokens}")
         logger.info(f"Estimated OpenAI GPT-4o-mini Vision API call cost: ${cost:.6f}")
+        logger.debug(f"Updated usage data: {usage_data['openai_gpt4o_mini_vision']}")
+
         return analysis
     except Exception as e:
         logger.error(f"Error analyzing image: {str(e)}")
-        return None
+        logger.exception(e)
+        return "An error occurred while analyzing the image. Please try again later."
 
 @bot.command(name='ask')
 @commands.cooldown(1, 10, commands.BucketType.user)
@@ -699,7 +741,7 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
     # Update status to reflect summarizing action
     await bot.change_presence(activity=Activity(type=ActivityType.playing, name="channel summary..."))
-    logger.debug("Status updated to: [watching] channel summary...")
+    logger.debug("Status updated to: [playing] channel summary...")
 
     if channel is None:
         await ctx.send("Please specify a channel to summarize. Example: !summary #market-analysis")
@@ -954,6 +996,7 @@ async def start_bot() -> None:
         conn = TCPConnector(limit=10)
         session = ClientSession(connector=conn)
 
+        # Start the periodic tasks for statistics and API call counter reset
         send_periodic_stats.start()
         reset_api_call_counter.start()
 
@@ -968,6 +1011,7 @@ async def start_bot() -> None:
         logger.info("Bot startup cancelled")
     except Exception as e:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
+        logger.error(traceback.format_exc())
     finally:
         if session:
             await session.close()
