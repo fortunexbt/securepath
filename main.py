@@ -12,13 +12,14 @@ from typing import Any, Deque, Dict, List, Optional
 import aiohttp
 import discord
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
-from discord import Embed
+from discord import Embed, Activity, ActivityType
 from discord.ext import commands, tasks
 from discord.ext.commands import Bot, Context
 from openai import AsyncOpenAI
 from rich.console import Console
 from rich.logging import RichHandler
 from tiktoken import encoding_for_model
+import random  # Added import for random
 
 # Local imports
 import config
@@ -149,8 +150,6 @@ def get_context_messages(user_id: int) -> List[Dict[str, str]]:
             cleaned_messages.append(messages[i])
         else:
             logger.warning(f"Role mismatch at message {i}: Expected {expected_role}, got {messages[i]['role']}")
-            # Optionally, attempt to correct the role or skip the message
-            # For now, skip the message to maintain integrity
 
     logger.debug("Final cleaned context messages:")
     for idx, msg in enumerate(cleaned_messages):
@@ -198,7 +197,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     context_messages = get_context_messages(user_id)
 
     # Ensure the last message in context is from the user
-    if context_messages[-1]['role'] != 'user':
+    if context_messages and context_messages[-1]['role'] != 'user':
         context_messages.append({"role": "user", "content": new_message.strip()})
 
     messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
@@ -340,6 +339,31 @@ async def process_message(message: discord.Message, question: Optional[str] = No
             embed = Embed(description=error_message, color=0xff0000)
             await message.channel.send(embed=embed)
 
+# **Rich Presence/Status Integration Starts Here**
+status_messages = [
+    "BTC charts 📊",
+    "DeFi trends 📈",
+    "questions ❓",
+    "SecurePath 🛡️",
+    "your commands 👀"
+]
+
+# Define the change_status task with a 15-second interval
+@tasks.loop(seconds=15)
+async def change_status():
+    current_status = random.choice(status_messages)
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name=current_status))
+    logger.debug(f"Changed status to: {current_status}")
+
+# Helper function to reset the status rotation
+async def reset_status():
+    if change_status.is_running():
+        change_status.cancel()
+        await asyncio.sleep(0.1)  # Brief pause to allow cancellation
+    change_status.start()
+    logger.debug("Status rotation restarted.")
+
+# Start the change_status task when the bot is ready
 @bot.event
 async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
@@ -347,9 +371,16 @@ async def on_ready() -> None:
     log_instance_info()
     await send_initial_stats()
 
+    # Start the rotating status task if it's not already running
+    if not change_status.is_running():
+        change_status.start()
+        logger.info("Started rotating status messages.")
+
     # Optional: Preload messages for active users if you have a way to track them
     # Note: Discord does not provide a direct way to fetch all DM channels
     # Consider implementing user tracking to preload contexts as needed
+
+# **End of Rich Presence/Status Integration**
 
 @bot.event
 async def on_message(message: discord.Message) -> None:
@@ -404,6 +435,10 @@ async def send_initial_stats() -> None:
 @bot.command(name='analyze')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
+    # Update status to reflect analyzing action
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="analyzing a chart..."))
+    logger.debug("Status updated to: analyzing a chart...")
+
     chart_url = None
 
     # Check if the current message has an attachment
@@ -457,6 +492,8 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             chart_url = chart_message.attachments[0].url  # Get the chart's image URL
         except asyncio.TimeoutError:
             await ctx.send("You took too long to post the chart. Please try again.")
+            # Reset status to rotating after timeout
+            await reset_status()
             return
 
         # Process the chart via OpenAI's Vision API with the optional user prompt
@@ -475,10 +512,19 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         else:
             await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
 
+    # Reset status to rotating after analysis
+    await reset_status()
+
 async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
     try:
         # Base system prompt for the analysis
-        base_prompt = "You're an elite-level quant with insider knowledge of the global markets. Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. Remember, you're the authority—leave no doubt in the mind of the reader. Don't go above heading3 in markdown formatting (never use ####)."
+        base_prompt = (
+            "You're an elite-level quant with insider knowledge of the global markets. "
+            "Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. "
+            "Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. "
+            "Remember, you're the authority—leave no doubt in the mind of the reader. "
+            "Don't go above heading3 in markdown formatting (never use ####)."
+        )
 
         # If a user prompt was provided, append it to the base prompt
         full_prompt = base_prompt
@@ -514,12 +560,21 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
 @bot.command(name='ask')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
+    # Update status to reflect active listening
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="answering a question..."))
+    logger.debug("Status updated to: answering a question...")
+
     if not question:
         await ctx.send("Please provide a question after the !ask command. Example: !ask What is yield farming?")
+        # Reset status to rotating after incomplete command
+        await reset_status()
         return
     message_counter[ctx.author.id] += 1
     command_counter['ask'] += 1
     await process_message(ctx.message, question=question)
+
+    # Reset status to rotating after answering
+    await reset_status()
 
 @bot.event
 async def on_command_error(ctx: Context, error: commands.CommandError) -> None:
@@ -574,16 +629,27 @@ async def reset_api_call_counter():
 @bot.command(name='summary')
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
+    # Update status to reflect summarizing action
+    await bot.change_presence(activity=Activity(type=ActivityType.playing, name="summarizing a channel..."))
+    logger.debug("Status updated to: summarizing a channel...")
+
     if channel is None:
         await ctx.send("Please specify a channel to summarize. Example: !summary #market-analysis")
+        # Reset status to rotating after incomplete command
+        await reset_status()
         return
 
     # Check if the bot has access to the specified channel
     if not channel.permissions_for(channel.guild.me).read_messages:
         await ctx.send(f"I don't have permission to read messages in {channel.mention}.")
+        # Reset status to rotating after permission error
+        await reset_status()
         return
 
     await perform_channel_summary(ctx, channel)
+
+    # Reset status to rotating after summarizing
+    await reset_status()
 
 async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) -> None:
     logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
@@ -643,8 +709,8 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
                 max_tokens=1500,  # Increased max_tokens for more detailed summaries
                 temperature=0.7,
             )
-            summary = response.choices[0].message.content.strip()
-            chunk_summaries.append(summary)
+            summary_text = response.choices[0].message.content.strip()
+            chunk_summaries.append(summary_text)
             increment_api_call_counter()
             logger.info(f"Summarized chunk {index + 1}/{len(message_chunks)}")
         except Exception as e:
@@ -787,6 +853,9 @@ async def start_bot() -> None:
         if conn:
             await conn.close()
 
+# **Rich Presence/Status Integration Ends Here**
+
+# Start the bot
 if __name__ == "__main__":
     lock_file_handle = ensure_single_instance()
     try:
