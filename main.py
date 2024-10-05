@@ -1,5 +1,3 @@
-# main.py
-
 import asyncio
 import json
 import logging
@@ -53,6 +51,26 @@ user_contexts: Dict[int, Deque[Dict[str, Any]]] = {}
 message_counter = Counter()
 command_counter = Counter()
 api_call_counter = 0
+total_token_cost = 0.0  # Added for tracking total token cost
+
+# Usage data tracking
+usage_data = {
+    'perplexity': {
+        'requests': 0,
+        'tokens': 0,
+        'cost': 0.0,
+    },
+    'openai_gpt4o_mini': {
+        'input_tokens': 0,
+        'cached_input_tokens': 0,
+        'cost': 0.0,
+    },
+    'openai_gpt4o_mini_vision': {
+        'requests': 0,
+        'tokens': 0,
+        'cost': 0.0,
+    }
+}
 
 class RateLimiter:
     def __init__(self, max_calls: int, interval: int):
@@ -177,6 +195,11 @@ def increment_api_call_counter():
     api_call_counter += 1
     logger.info(f"API call counter: {api_call_counter}")
 
+def increment_token_cost(cost: float):
+    global total_token_cost
+    total_token_cost += cost
+    logger.info(f"Total token cost: ${total_token_cost:.6f}")
+
 def can_make_api_call() -> bool:
     return api_call_counter < config.DAILY_API_CALL_LIMIT
 
@@ -212,6 +235,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     }
 
     logger.info(f"Sending query to Perplexity API for user {user_id}")
+    usage_data['perplexity']['requests'] += 1
     increment_api_call_counter()
     start_time = time.time()
 
@@ -227,8 +251,14 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                 prompt_tokens = usage.get('prompt_tokens', 0)
                 completion_tokens = usage.get('completion_tokens', 0)
                 total_tokens = usage.get('total_tokens', 0)
+                usage_data['perplexity']['tokens'] += total_tokens
+
+                # Calculate cost: $5 per 1000 requests + $1 per 1M tokens
+                cost = (usage_data['perplexity']['requests'] * 5 / 1000) + (usage_data['perplexity']['tokens'] / 1_000_000 * 1)
+                usage_data['perplexity']['cost'] = round(cost, 6)
+                increment_token_cost(cost)
+
                 logger.info(f"Perplexity API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-                cost = (prompt_tokens * 0.00015 + completion_tokens * 0.0006) / 1000
                 logger.info(f"Estimated Perplexity API call cost: ${cost:.6f}")
                 return answer
             else:
@@ -260,6 +290,34 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
             temperature=0.7,
         )
         answer = response.choices[0].message.content.strip()
+
+        # Access usage attributes correctly
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            prompt_tokens = usage.prompt_tokens
+            completion_tokens = usage.completion_tokens
+            total_tokens = usage.total_tokens
+        else:
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+
+        # Determine if the prompt was cached
+        # This requires the bot to track cached prompts. For simplicity, we'll assume no caching.
+        is_cached = False  # Replace with actual caching logic if implemented
+
+        if is_cached:
+            usage_data['openai_gpt4o_mini']['cached_input_tokens'] += prompt_tokens
+            cost = (prompt_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.075)
+        else:
+            usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
+            cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
+
+        usage_data['openai_gpt4o_mini']['cost'] += cost
+        increment_token_cost(cost)
+
+        logger.info(f"OpenAI GPT-4o-mini usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI GPT-4o-mini API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
@@ -267,7 +325,6 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
         return None
 
 async def send_long_message(channel: discord.abc.Messageable, message: str) -> None:
-    max_length = 2000
     embed_max_length = 4096
 
     if not message:
@@ -287,7 +344,46 @@ async def send_long_message(channel: discord.abc.Messageable, message: str) -> N
             logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
             break
 
-async def process_message(message: discord.Message, question: Optional[str] = None) -> None:
+async def log_interaction(user: discord.User, channel: discord.abc.Messageable, command: Optional[str], user_input: str, bot_response: str) -> None:
+    """
+    Logs the user interaction to the specified log channel.
+
+    :param user: The Discord user who initiated the interaction.
+    :param channel: The channel where the interaction took place.
+    :param command: The command used, if any.
+    :param user_input: The user's question or input.
+    :param bot_response: The bot's response to the user.
+    """
+    log_channel = bot.get_channel(config.LOG_CHANNEL_ID)
+    if not log_channel:
+        logger.warning(f"Log channel with ID {config.LOG_CHANNEL_ID} not found.")
+        return
+
+    # Truncate fields to comply with Discord's embed limits
+    truncated_user_input = (user_input[:1024] + '...') if len(user_input) > 1024 else user_input
+    truncated_bot_response = (bot_response[:1024] + '...') if len(bot_response) > 1024 else bot_response
+
+    # Create an embed for the interaction log
+    embed = Embed(
+        title="📝 User Interaction",
+        color=0xFF9900,  # Orange color to stand out
+        timestamp=datetime.now(timezone.utc)
+    )
+    embed.set_author(name=f"{user}", icon_url=user.avatar.url if user.avatar else None)
+    embed.add_field(name="Command", value=command if command else "N/A", inline=True)
+    embed.add_field(name="User ID", value=str(user.id), inline=True)
+    embed.add_field(name="Channel", value=channel.mention if isinstance(channel, discord.TextChannel) else "Direct Message", inline=True)
+    embed.add_field(name="User Input", value=truncated_user_input, inline=False)
+    embed.add_field(name="Bot Response Preview", value=truncated_bot_response, inline=False)
+    embed.set_footer(text=f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
+
+    try:
+        await log_channel.send(embed=embed)
+        logger.debug(f"Logged interaction for user {user.id}")
+    except discord.errors.HTTPException as e:
+        logger.error(f"Failed to send interaction log embed: {str(e)}")
+
+async def process_message(message: discord.Message, question: Optional[str] = None, command: Optional[str] = None) -> None:
     if api_rate_limiter.is_rate_limited(message.author.id):
         await message.channel.send("You are sending messages too quickly. Please slow down.")
         logger.info(f"Rate limited user {message.author.id}")
@@ -330,6 +426,15 @@ async def process_message(message: discord.Message, question: Optional[str] = No
                 update_user_context(message.author.id, answer, role='assistant')
                 await send_long_message(message.channel, answer)
                 logger.info(f"Sent response to user {message.author.id}")
+
+                # Log the interaction with truncated bot response
+                await log_interaction(
+                    user=message.author,
+                    channel=message.channel,
+                    command=command,  # Pass the command if any
+                    user_input=question,
+                    bot_response=answer[:1024]  # Ensure bot_response is truncated
+                )
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
                 embed = Embed(description=error_message, color=0xff0000)
@@ -555,6 +660,16 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         analysis = response.choices[0].message.content.strip()
         analysis = analysis.replace("####", "###")
 
+        # For Vision, assume fixed tokens per request as per the user's example
+        # Total tokens: 36835
+        usage_data['openai_gpt4o_mini_vision']['requests'] += 1
+        usage_data['openai_gpt4o_mini_vision']['tokens'] += 36835
+        cost = 36835 / 1_000_000 * 0.15  # $0.15 per 1M tokens
+        usage_data['openai_gpt4o_mini_vision']['cost'] += cost
+        increment_token_cost(cost)
+
+        logger.info(f"OpenAI GPT-4o-mini Vision usage: Tokens={36835}")
+        logger.info(f"Estimated OpenAI GPT-4o-mini Vision API call cost: ${cost:.6f}")
         return analysis
     except Exception as e:
         logger.error(f"Error analyzing image: {str(e)}")
@@ -574,7 +689,7 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
         return
     message_counter[ctx.author.id] += 1
     command_counter['ask'] += 1
-    await process_message(ctx.message, question=question)
+    await process_message(ctx.message, question=question, command='ask')
 
     # Reset status to rotating after answering
     await reset_status()
@@ -599,12 +714,13 @@ async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
         await reset_status()
         return
 
-    await perform_channel_summary(ctx, channel)
+    command_counter['summary'] += 1
+    await perform_channel_summary(ctx, channel, command='summary')
 
     # Reset status to rotating after summarizing
     await reset_status()
 
-async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) -> None:
+async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, command: Optional[str] = None) -> None:
     logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
 
     await ctx.send(f"Generating summary for {channel.mention}... This may take a moment.")
@@ -666,6 +782,28 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
             chunk_summaries.append(summary_text)
             increment_api_call_counter()
             logger.info(f"Summarized chunk {index + 1}/{len(message_chunks)}")
+
+            # Track token usage for OpenAI GPT-4o-mini
+            if hasattr(response, 'usage'):
+                usage = response.usage
+                prompt_tokens = usage.prompt_tokens
+                completion_tokens = usage.completion_tokens
+                total_tokens = usage.total_tokens
+            else:
+                prompt_tokens = 0
+                completion_tokens = 0
+                total_tokens = 0
+
+            usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
+            # Assuming cached prompts logic here if applicable
+            # For simplicity, we're treating all as uncached
+            cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
+            usage_data['openai_gpt4o_mini']['cost'] += cost
+            increment_token_cost(cost)
+
+            logger.info(f"OpenAI GPT-4o-mini usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+            logger.info(f"Estimated OpenAI GPT-4o-mini API call cost: ${cost:.6f}")
+
         except Exception as e:
             logger.error(f"Error summarizing chunk {index + 1}: {e}")
             logger.exception(e)
@@ -694,6 +832,27 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
         final_summary = response.choices[0].message.content.strip()
         increment_api_call_counter()
         logger.info("Final summary generated successfully.")
+
+        # Track token usage for OpenAI GPT-4o-mini
+        if hasattr(response, 'usage'):
+            usage = response.usage
+            prompt_tokens = usage.prompt_tokens
+            completion_tokens = usage.completion_tokens
+            total_tokens = usage.total_tokens
+        else:
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+
+        usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
+        # Assuming cached prompts logic here if applicable
+        # For simplicity, we're treating all as uncached
+        cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
+        usage_data['openai_gpt4o_mini']['cost'] += cost
+        increment_token_cost(cost)
+
+        logger.info(f"OpenAI GPT-4o-mini final summary usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI GPT-4o-mini final summary API call cost: ${cost:.6f}")
 
         # Create a visually appealing embed
         embed = Embed(
@@ -725,6 +884,15 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel) ->
             await ctx.send(embed=embed)
 
         logger.info(f"Summary posted to channel {ctx.channel.name}")
+
+        # Log the interaction with truncated bot response
+        await log_interaction(
+            user=ctx.author,
+            channel=ctx.channel,
+            command=command,
+            user_input=f"Summary for #{channel.name}",
+            bot_response=final_summary[:1024]  # Preview limited to 1024 characters
+        )
     except Exception as e:
         logger.error(f"Error generating final summary: {e}")
         logger.exception(e)
@@ -806,41 +974,7 @@ async def start_bot() -> None:
         if conn:
             await conn.close()
 
-# **Rich Presence/Status Integration Ends Here**
-
 # **Logging for All Commands Starts Here**
-
-@bot.event
-async def on_command(ctx: Context) -> None:
-    """
-    Event triggered when a command is successfully invoked.
-    Logs the command details to LOG_CHANNEL_ID.
-    """
-    log_channel = bot.get_channel(config.LOG_CHANNEL_ID)
-    if not log_channel:
-        logger.warning(f"Log channel with ID {config.LOG_CHANNEL_ID} not found.")
-        return
-
-    embed = Embed(
-        title="🔧 Command Executed",
-        color=0x1D82B6,
-        timestamp=datetime.now(timezone.utc)
-    )
-    embed.add_field(name="Command", value=ctx.command.name, inline=True)
-    embed.add_field(name="User", value=f"{ctx.author} (ID: {ctx.author.id})", inline=True)
-
-    if isinstance(ctx.channel, discord.DMChannel):
-        embed.add_field(name="Channel", value="Direct Message", inline=True)
-    else:
-        embed.add_field(name="Channel", value=f"{ctx.channel} (ID: {ctx.channel.id})", inline=True)
-        embed.add_field(name="Guild", value=f"{ctx.guild.name} (ID: {ctx.guild.id})", inline=True)
-
-    embed.set_footer(text=f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
-
-    await log_channel.send(embed=embed)
-    logger.debug(f"Logged command '{ctx.command.name}' executed by {ctx.author}.")
-
-# **End of Logging for All Commands**
 
 async def send_stats() -> None:
     if not config.LOG_CHANNEL_ID:
@@ -858,6 +992,17 @@ async def send_stats() -> None:
     embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
     embed.add_field(name="API Calls Made", value=api_call_counter, inline=True)
 
+    # Add Estimated Token Cost per Model
+    embed.add_field(
+        name="Estimated Token Cost",
+        value=(
+            f"**Perplexity:** ${usage_data['perplexity']['cost']:.6f}\n"
+            f"**OpenAI GPT-4o-mini:** ${usage_data['openai_gpt4o_mini']['cost']:.6f}\n"
+            f"**OpenAI GPT-4o-mini Vision:** ${usage_data['openai_gpt4o_mini_vision']['cost']:.6f}"
+        ),
+        inline=False
+    )
+
     top_users = []
     for user_id, count in message_counter.most_common(5):
         user = bot.get_user(user_id)
@@ -870,7 +1015,7 @@ async def send_stats() -> None:
     await channel.send(embed=embed)
     logger.info(f"Stats sent to log channel: {channel.name}")
 
-@tasks.loop(hours=24)
+@tasks.loop(hours=12)
 async def send_periodic_stats() -> None:
     await send_stats()
 
@@ -879,6 +1024,61 @@ async def reset_api_call_counter():
     global api_call_counter
     api_call_counter = 0
     logger.info("API call counter reset")
+
+@bot.command(name='token_usage')
+@commands.has_permissions(administrator=True)
+async def token_usage(ctx: Context) -> None:
+    """
+    Admin-only command to display token usage and costs for all models.
+    Usage: !token_usage
+    """
+    if ctx.author.id != config.OWNER_ID:
+        await ctx.send("You do not have permission to use this command.")
+        logger.warning(f"Unauthorized token_usage command attempt by user {ctx.author.id}")
+        return
+
+    embed = Embed(title="📊 Token Usage and Costs", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
+
+    # Perplexity
+    perplexity = usage_data['perplexity']
+    embed.add_field(
+        name="Perplexity - llama-3.1-sonar-large-128k-online",
+        value=(
+            f"**Requests:** {perplexity['requests']}\n"
+            f"**Tokens:** {perplexity['tokens']}\n"
+            f"**Cost:** ${perplexity['cost']:.6f}"
+        ),
+        inline=False
+    )
+
+    # OpenAI GPT-4o-mini
+    openai = usage_data['openai_gpt4o_mini']
+    embed.add_field(
+        name="OpenAI GPT-4o-mini",
+        value=(
+            f"**Input Tokens:** {openai['input_tokens']}\n"
+            f"**Cached Input Tokens:** {openai['cached_input_tokens']}\n"
+            f"**Cost:** ${openai['cost']:.6f}"
+        ),
+        inline=False
+    )
+
+    # OpenAI GPT-4o-mini Vision
+    vision = usage_data['openai_gpt4o_mini_vision']
+    embed.add_field(
+        name="OpenAI GPT-4o-mini Vision",
+        value=(
+            f"**Requests:** {vision['requests']}\n"
+            f"**Tokens:** {vision['tokens']}\n"
+            f"**Cost:** ${vision['cost']:.6f}"
+        ),
+        inline=False
+    )
+
+    await ctx.send(embed=embed)
+    logger.info(f"Token usage requested by admin user {ctx.author.id}")
+
+# **End of Logging for All Commands**
 
 # Start the bot
 if __name__ == "__main__":
