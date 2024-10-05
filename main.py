@@ -439,8 +439,8 @@ async def send_initial_stats() -> None:
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
     # Update status to reflect analyzing action
-    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="analysis on a chart..."))
-    logger.debug("Status updated to: analyzing a chart...")
+    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
+    logger.debug("Status updated to: [watching] image analysis...")
 
     chart_url = None
 
@@ -474,17 +474,17 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         # Step 3: Post the analysis in an embedded message
         if image_analysis:
             embed = Embed(
-                title="Chart Analysis",
+                title="Image Analysis",
                 description=image_analysis,
                 color=0x00ff00,
             )
             embed.set_image(url=chart_url)  # Display the chart along with the analysis
             await ctx.send(embed=embed)
         else:
-            await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+            await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
     else:
         # If no chart was detected, ask the user to provide one
-        await ctx.send("Please post the chart you'd like to analyze (make sure it's an image).")
+        await ctx.send("Please post the image you'd like to analyze.")
 
         # Wait for the user to post the chart in the channel
         def check(msg):
@@ -494,13 +494,13 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             chart_message = await bot.wait_for('message', check=check, timeout=60.0)
             chart_url = chart_message.attachments[0].url  # Get the chart's image URL
         except asyncio.TimeoutError:
-            await ctx.send("You took too long to post the chart. Please try again.")
+            await ctx.send("You took too long to post an image. Please try again.")
             # Reset status to rotating after timeout
             await reset_status()
             return
 
         # Process the chart via OpenAI's Vision API with the optional user prompt
-        await ctx.send("Analyzing the chart...")
+        await ctx.send("Analyzing... This may take a moment.")
 
         image_analysis = await analyze_chart_image(chart_url, user_prompt)
 
@@ -513,7 +513,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             embed.set_image(url=chart_url)  # Display the chart along with the analysis
             await ctx.send(embed=embed)
         else:
-            await ctx.send("Sorry, I couldn't analyze the chart. Please try again.")
+            await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
 
     # Reset status to rotating after analysis
     await reset_status()
@@ -557,7 +557,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
 
         return analysis
     except Exception as e:
-        logger.error(f"Error analyzing chart image: {str(e)}")
+        logger.error(f"Error analyzing image: {str(e)}")
         return None
 
 @bot.command(name='ask')
@@ -565,7 +565,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     # Update status to reflect active listening
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="a question..."))
-    logger.debug("Status updated to: answering a question...")
+    logger.debug("Status updated to: [watching] a question...")
 
     if not question:
         await ctx.send("Please provide a question after the !ask command. Example: !ask What is yield farming?")
@@ -583,8 +583,8 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
 @commands.cooldown(1, 10, commands.BucketType.user)
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
     # Update status to reflect summarizing action
-    await bot.change_presence(activity=Activity(type=ActivityType.playing, name="summarizing a channel..."))
-    logger.debug("Status updated to: summarizing a channel...")
+    await bot.change_presence(activity=Activity(type=ActivityType.playing, name="channel summary..."))
+    logger.debug("Status updated to: [watching] channel summary...")
 
     if channel is None:
         await ctx.send("Please specify a channel to summarize. Example: !summary #market-analysis")
