@@ -373,7 +373,9 @@ async def send_long_message(channel: discord.abc.Messageable, message: str) -> N
 
         try:
             await channel.send(embed=embed)
-            logger.debug(f"Sent message part {i + 1}/{len(message_parts)} to channel {channel.name}")
+            # Updated logging to handle DMChannel
+            channel_name = channel.name if not isinstance(channel, discord.DMChannel) else "Direct Message"
+            logger.debug(f"Sent message part {i + 1}/{len(message_parts)} to channel {channel_name}")
         except discord.errors.HTTPException as e:
             logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
             break
