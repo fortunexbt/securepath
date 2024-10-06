@@ -11,7 +11,7 @@ from typing import Any, Deque, Dict, List, Optional
 
 import aiohttp
 import discord
-from aiohttp import ClientSession, ClientTimeout, TCPConnector
+from aiohttp import ClientSession, ClientTimeout, TCPConnector, web
 from discord import Embed, Activity, ActivityType
 from discord.ext import commands, tasks
 from discord.ext.commands import Bot, Context
@@ -1068,6 +1068,9 @@ def quiet_exit() -> None:
     logging.shutdown()
     sys.exit(0)
 
+async def health_check(request):
+    return web.Response(text="Healthy")
+
 async def start_bot() -> None:
     global conn, session
     import signal
@@ -1076,6 +1079,7 @@ async def start_bot() -> None:
         for sig in (signal.SIGTERM, signal.SIGINT):
             asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
 
+        # Initialize aiohttp connector and session
         conn = TCPConnector(limit=10)
         session = ClientSession(connector=conn)
 
@@ -1083,10 +1087,25 @@ async def start_bot() -> None:
         send_periodic_stats.start()
         reset_api_call_counter.start()
 
+        # Ensure DISCORD_TOKEN is set
         if not config.DISCORD_TOKEN:
             logger.error("DISCORD_TOKEN is not set. Cannot start the bot.")
             return
 
+        # Create a simple web application
+        app = web.Application()
+        app.router.add_get('/', health_check)  # Health check endpoint
+
+        # Define the PORT
+        port = int(os.environ.get("PORT", 5000))
+        
+        # Start the web server in the background
+        web_runner = web.AppRunner(app)
+        await web_runner.setup()
+        site = web.TCPSite(web_runner, '0.0.0.0', port)
+        await site.start()
+
+        # Start the Discord bot
         await bot.start(config.DISCORD_TOKEN)
     except discord.errors.HTTPException as e:
         logger.error(f"HTTP Exception: {e}")
@@ -1096,12 +1115,17 @@ async def start_bot() -> None:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
         logger.error(traceback.format_exc())
     finally:
+        # Clean up the session and connection
         if session:
             await session.close()
             logger.debug("Closed aiohttp session during shutdown.")
         if conn:
             await conn.close()
             logger.debug("Closed aiohttp connector during shutdown.")
+        # Shutdown web server if running
+        if 'web_runner' in locals():
+            await web_runner.cleanup()
+            logger.debug("Closed aiohttp web application during shutdown.")
 
 # **Logging for All Commands Starts Here**
 
@@ -1115,7 +1139,7 @@ async def send_stats() -> None:
         logger.debug(f"Could not find log channel with ID {config.LOG_CHANNEL_ID}")
         return
 
-    embed = Embed(title="Bot Statistics", color=0x00ff00)
+    embed = discord.Embed(title="Bot Statistics", color=0x00ff00)
     embed.add_field(name="Total Messages", value=sum(message_counter.values()), inline=True)
     embed.add_field(name="Unique Users", value=len(message_counter), inline=True)
     embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
@@ -1177,7 +1201,7 @@ async def token_usage(ctx: Context) -> None:
         logger.warning(f"Unauthorized token_usage command attempt by user {ctx.author.id}")
         return
 
-    embed = Embed(title="📊 Token Usage and Costs", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
+    embed = discord.Embed(title="📊 Token Usage and Costs", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
 
     # Perplexity
     perplexity = usage_data['perplexity']
@@ -1231,7 +1255,7 @@ async def cache_stats(ctx: Context) -> None:
         return
 
     cache_hit_rate = calculate_cache_hit_rate()
-    embed = Embed(title="📊 Cache Hit Rate", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
+    embed = discord.Embed(title="📊 Cache Hit Rate", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
     embed.add_field(name="OpenAI GPT-4o-mini Cache Hit Rate", value=f"{cache_hit_rate:.2f}%", inline=False)
     await ctx.send(embed=embed)
     logger.info(f"Cache hit rate requested by admin user {ctx.author.id}")
