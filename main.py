@@ -248,17 +248,16 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
 
     context_messages = get_context_messages(user_id)
 
-    # Ensure the last message in context is from the user
     if context_messages and context_messages[-1]['role'] != 'user':
         context_messages.append({"role": "user", "content": new_message.strip()})
 
     messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
 
     data = {
-        "model": "llama-3.1-sonar-large-128k-online",
+        "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 1000,
-        "search_recency_filter": "day"
+        "max_tokens": 150,
+        "search_recency_filter": "week"
     }
 
     logger.info(f"Sending query to Perplexity API for user {user_id}")
@@ -271,16 +270,23 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         async with session.post(config.PERPLEXITY_API_URL, json=data, headers=headers, timeout=timeout) as response:
             elapsed_time = time.time() - start_time
             logger.info(f"Perplexity API request completed in {elapsed_time:.2f} seconds")
+
             if response.status == 200:
                 resp_json = await response.json()
                 answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
+                citations = resp_json.get('citations', [])
+
+                # format citations
+                if citations:
+                    formatted_citations = "\n\nDYOR (do your own research):\n" + "\n".join(f"- {cite}" for cite in citations)
+                    answer += formatted_citations
+
                 usage = resp_json.get('usage', {})
                 prompt_tokens = usage.get('prompt_tokens', 0)
                 completion_tokens = usage.get('completion_tokens', 0)
                 total_tokens = usage.get('total_tokens', 0)
                 usage_data['perplexity']['tokens'] += total_tokens
 
-                # Calculate cost: $5 per 1000 requests + $1 per 1M tokens
                 cost = (usage_data['perplexity']['requests'] * 5 / 1000) + (usage_data['perplexity']['tokens'] / 1_000_000 * 1)
                 usage_data['perplexity']['cost'] = round(cost, 6)
                 increment_token_cost(cost)
@@ -460,8 +466,16 @@ async def process_message(message: discord.Message, question: Optional[str] = No
 
             if answer:
                 update_user_context(message.author.id, answer, role='assistant')
-                await send_long_message(message.channel, answer)
-                logger.info(f"Sent response to user {message.author.id}")
+
+                # use an embed for better readability
+                embed = discord.Embed(description=answer[:4000], color=0x004200)
+                embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+
+                if len(answer) > 4000:
+                    embed.set_footer(text="Message truncated. Citations included at the end.")
+
+                await message.channel.send(embed=embed)
+
 
                 # Log the interaction with truncated bot response
                 await log_interaction(
@@ -1097,7 +1111,7 @@ async def start_bot() -> None:
         app.router.add_get('/', health_check)  # Health check endpoint
 
         # Define the PORT
-        port = int(os.environ.get("PORT", 5000))
+        port = int(os.environ.get("PORT", 5050))
         
         # Start the web server in the background
         web_runner = web.AppRunner(app)
@@ -1206,7 +1220,7 @@ async def token_usage(ctx: Context) -> None:
     # Perplexity
     perplexity = usage_data['perplexity']
     embed.add_field(
-        name="Perplexity - llama-3.1-sonar-large-128k-online",
+        name="Perplexity - sonar",
         value=(
             f"**Requests:** {perplexity['requests']}\n"
             f"**Tokens:** {perplexity['tokens']}\n"
