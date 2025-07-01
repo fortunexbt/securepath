@@ -274,7 +274,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     data = {
         "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 2000,
+        "max_tokens": 1000,
         "search_after_date_filter": ninety_days_ago,
         "search_domain_filter": domain_filter,
         "web_search_options": {
