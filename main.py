@@ -278,7 +278,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         "search_after_date_filter": ninety_days_ago,
         "search_domain_filter": domain_filter,
         "web_search_options": {
-            "search_context_size": "medium"
+            "search_context_size": "high"
         }
     }
     # --- End of Corrected Search Optimization ---
