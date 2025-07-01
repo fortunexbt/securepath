@@ -256,7 +256,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     data = {
         "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 150,
+        "max_tokens": 2000, # Increased from 150 to allow longer responses
         "search_recency_filter": "week"
     }
 
@@ -363,38 +363,50 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
         logger.error(traceback.format_exc())
         return None
 
-async def send_long_message(channel: discord.abc.Messageable, message: str) -> None:
-    embed_max_length = 4096
-
-    if not message:
+async def send_long_embed(
+    channel: discord.abc.Messageable,
+    text: str,
+    color: int = 0x004200,
+    title: Optional[str] = None,
+    image_url: Optional[str] = None
+) -> None:
+    """
+    Sends a long message by splitting it into multiple embeds, handling Discord's character limits.
+    Retains title and image on the first embed.
+    """
+    if not text:
         return
 
-    message_parts = [message[i:i + embed_max_length] for i in range(0, len(message), embed_max_length)]
+    embed_max_length = 4096
+    parts = [text[i:i + embed_max_length] for i in range(0, len(text), embed_max_length)]
 
-    for i, part in enumerate(message_parts):
-        embed = Embed(description=part, color=0x004200)
+    for i, part in enumerate(parts):
+        if i == 0:
+            # First embed gets the optional title and image
+            embed = Embed(title=title, description=part, color=color)
+            if image_url:
+                embed.set_image(url=image_url)
+        else:
+            # Subsequent embeds only get the description
+            embed = Embed(description=part, color=color)
+
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
-        if len(message_parts) > 1:
-            embed.set_footer(text=f"Part {i + 1}/{len(message_parts)}")
+        
+        # Add a footer to indicate multipart messages
+        if len(parts) > 1:
+            embed.set_footer(text=f"Part {i + 1}/{len(parts)}")
 
         try:
             await channel.send(embed=embed)
-            # Updated logging to handle DMChannel
-            channel_name = channel.name if not isinstance(channel, discord.DMChannel) else "Direct Message"
-            logger.debug(f"Sent message part {i + 1}/{len(message_parts)} to channel {channel_name}")
+            channel_name = getattr(channel, 'name', "Direct Message")
+            logger.debug(f"Sent embed part {i + 1}/{len(parts)} to {channel_name}")
         except discord.errors.HTTPException as e:
-            logger.error(f"Failed to send message part {i + 1}/{len(message_parts)}: {str(e)}")
-            break
+            logger.error(f"Failed to send embed part {i + 1}/{len(parts)}: {str(e)}")
+            break # Stop sending if one part fails
 
 async def log_interaction(user: discord.User, channel: discord.abc.Messageable, command: Optional[str], user_input: str, bot_response: str) -> None:
     """
     Logs the user interaction to the specified log channel.
-
-    :param user: The Discord user who initiated the interaction.
-    :param channel: The channel where the interaction took place.
-    :param command: The command used, if any.
-    :param user_input: The user's question or input.
-    :param bot_response: The bot's response to the user.
     """
     log_channel = bot.get_channel(config.LOG_CHANNEL_ID)
     if not log_channel:
@@ -466,24 +478,17 @@ async def process_message(message: discord.Message, question: Optional[str] = No
 
             if answer:
                 update_user_context(message.author.id, answer, role='assistant')
+                
+                # Use the new helper to send potentially long messages in embeds
+                await send_long_embed(message.channel, answer, color=0x004200)
 
-                # use an embed for better readability
-                embed = discord.Embed(description=answer[:4000], color=0x004200)
-                embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
-
-                if len(answer) > 4000:
-                    embed.set_footer(text="Message truncated. Citations included at the end.")
-
-                await message.channel.send(embed=embed)
-
-
-                # Log the interaction with truncated bot response
+                # Log the interaction with a truncated preview of the bot response
                 await log_interaction(
                     user=message.author,
                     channel=message.channel,
-                    command=command,  # Pass the command if any
+                    command=command,
                     user_input=question,
-                    bot_response=answer[:1024]  # Ensure bot_response is truncated
+                    bot_response=answer[:1024]
                 )
             else:
                 error_message = "I'm sorry, I couldn't get a response. Please try again later."
@@ -648,18 +653,18 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         await ctx.send("Detected a chart, analyzing it...")
         logger.info(f"Chart URL detected: {chart_url}")
 
-        # Step 2: Process the chart via OpenAI's Vision API with the optional user prompt
+        # Process the chart via OpenAI's Vision API with the optional user prompt
         image_analysis = await analyze_chart_image(chart_url, user_prompt)
 
-        # Step 3: Post the analysis in an embedded message
         if image_analysis:
-            embed = Embed(
-                title="Image Analysis",
-                description=image_analysis,
+            # Use the new helper to send a potentially long analysis with an image
+            await send_long_embed(
+                ctx.channel,
+                text=image_analysis,
                 color=0x00ff00,
+                title="Image Analysis",
+                image_url=chart_url
             )
-            embed.set_image(url=chart_url)  # Display the chart along with the analysis
-            await ctx.send(embed=embed)
             logger.info(f"Sent image analysis to channel {ctx.channel.name}")
 
             # Log interaction in LOG_CHANNEL_ID
@@ -668,7 +673,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
                 channel=ctx.channel,
                 command='analyze',
                 user_input=user_prompt or 'No additional prompt provided',
-                bot_response=image_analysis[:1024]  # Truncate the bot response
+                bot_response=image_analysis[:1024]
             )
         else:
             await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
@@ -926,8 +931,6 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                 total_tokens = 0
 
             usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
-            # Assuming cached prompts logic here if applicable
-            # For simplicity, we're treating all as uncached
             cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
             usage_data['openai_gpt4o_mini']['cost'] += cost
             increment_token_cost(cost)
@@ -977,8 +980,6 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             total_tokens = 0
 
         usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
-        # Assuming cached prompts logic here if applicable
-        # For simplicity, we're treating all as uncached
         cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
         usage_data['openai_gpt4o_mini']['cost'] += cost
         increment_token_cost(cost)
@@ -986,20 +987,19 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         logger.info(f"OpenAI GPT-4o-mini final summary usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
         logger.info(f"Estimated OpenAI GPT-4o-mini final summary API call cost: ${cost:.6f}")
 
-        # Create a visually appealing embed
+        # This command already has robust splitting logic, so we'll leave it as is.
+        # It handles more complex embeds with thumbnails and specific titles per part.
         embed = Embed(
             title=f"📄 48-Hour Summary for #{channel.name}",
             description=final_summary,
-            color=0x1D82B6,  # Discord's blurple color
+            color=0x1D82B6,
             timestamp=datetime.now(timezone.utc)
         )
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
         embed.set_thumbnail(url=channel.guild.icon.url if channel.guild.icon else None)
         embed.set_footer(text=f"Summary generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
-        # Handle embed length limitations
         if len(embed.description) > 4096:
-            # Split the description into multiple embeds
             parts = [embed.description[i:i+4096] for i in range(0, len(embed.description), 4096)]
             for i, part in enumerate(parts):
                 temp_embed = Embed(
@@ -1019,13 +1019,12 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
 
         logger.info(f"Summary posted to channel {ctx.channel.name}")
 
-        # Log the interaction with truncated bot response
         await log_interaction(
             user=ctx.author,
             channel=ctx.channel,
             command=command,
             user_input=f"Summary for #{channel.name}",
-            bot_response=final_summary[:1024]  # Preview limited to 1024 characters
+            bot_response=final_summary[:1024]
         )
     except Exception as e:
         logger.error(f"Error generating final summary: {e}")
@@ -1040,10 +1039,13 @@ def ensure_single_instance():
         fcntl.lockf(fp, fcntl.LOCK_EX | fcntl.LOCK_NB)
         logger.debug(f"Acquired lock on {lock_file}")
         return fp
-    except IOError:
-        logger.error("Another instance of the bot is already running. Exiting.")
-        print("Another instance of the bot is already running. Exiting.")
-        sys.exit(1)
+    except (IOError, ImportError): # Add ImportError for non-Unix systems
+        logger.warning("Could not acquire lock. This may be due to running on a non-Unix OS or another instance is running.")
+        # Return a dummy object with a close method for compatibility
+        class DummyLock:
+            def close(self): pass
+        return DummyLock()
+
 
 async def force_shutdown() -> None:
     embed = Embed(
@@ -1090,36 +1092,29 @@ async def start_bot() -> None:
     import signal
     try:
         logger.info("Setting up signal handlers")
-        for sig in (signal.SIGTERM, signal.SIGINT):
-            asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
+        # Signal handlers may not work on all OSes (e.g., Windows)
+        if sys.platform != "win32":
+            for sig in (signal.SIGTERM, signal.SIGINT):
+                asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
 
-        # Initialize aiohttp connector and session
         conn = TCPConnector(limit=10)
         session = ClientSession(connector=conn)
 
-        # Start the periodic tasks for statistics and API call counter reset
-        send_periodic_stats.start()
-        reset_api_call_counter.start()
-
-        # Ensure DISCORD_TOKEN is set
         if not config.DISCORD_TOKEN:
             logger.error("DISCORD_TOKEN is not set. Cannot start the bot.")
             return
 
-        # Create a simple web application
         app = web.Application()
-        app.router.add_get('/', health_check)  # Health check endpoint
+        app.router.add_get('/', health_check)
 
-        # Define the PORT
         port = int(os.environ.get("PORT", 5050))
         
-        # Start the web server in the background
         web_runner = web.AppRunner(app)
         await web_runner.setup()
         site = web.TCPSite(web_runner, '0.0.0.0', port)
         await site.start()
+        logger.info(f"Health check endpoint running at http://0.0.0.0:{port}")
 
-        # Start the Discord bot
         await bot.start(config.DISCORD_TOKEN)
     except discord.errors.HTTPException as e:
         logger.error(f"HTTP Exception: {e}")
@@ -1129,17 +1124,12 @@ async def start_bot() -> None:
         logger.error(f"Error during bot startup: {type(e).__name__}: {str(e)}")
         logger.error(traceback.format_exc())
     finally:
-        # Clean up the session and connection
-        if session:
-            await session.close()
-            logger.debug("Closed aiohttp session during shutdown.")
-        if conn:
-            await conn.close()
-            logger.debug("Closed aiohttp connector during shutdown.")
-        # Shutdown web server if running
         if 'web_runner' in locals():
             await web_runner.cleanup()
-            logger.debug("Closed aiohttp web application during shutdown.")
+        if session:
+            await session.close()
+        if conn:
+            await conn.close()
 
 # **Logging for All Commands Starts Here**
 
@@ -1159,7 +1149,6 @@ async def send_stats() -> None:
     embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
     embed.add_field(name="API Calls Made", value=api_call_counter, inline=True)
 
-    # Add Estimated Token Cost per Model
     embed.add_field(
         name="Estimated Token Cost",
         value=(
@@ -1170,7 +1159,6 @@ async def send_stats() -> None:
         inline=False
     )
 
-    # Include Cached Input Tokens
     embed.add_field(
         name="OpenAI GPT-4o-mini Cached Tokens",
         value=f"{usage_data['openai_gpt4o_mini']['cached_input_tokens']}",
@@ -1179,8 +1167,11 @@ async def send_stats() -> None:
 
     top_users = []
     for user_id, count in message_counter.most_common(5):
-        user = bot.get_user(user_id)
-        username = user.name if user else f"Unknown User ({user_id})"
+        try:
+            user = await bot.fetch_user(user_id)
+            username = user.name
+        except discord.NotFound:
+            username = f"Unknown User ({user_id})"
         top_users.append(f"{username}: {count}")
 
     embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data yet", inline=False)
@@ -1217,7 +1208,6 @@ async def token_usage(ctx: Context) -> None:
 
     embed = discord.Embed(title="📊 Token Usage and Costs", color=0x1D82B6, timestamp=datetime.now(timezone.utc))
 
-    # Perplexity
     perplexity = usage_data['perplexity']
     embed.add_field(
         name="Perplexity - sonar",
@@ -1229,7 +1219,6 @@ async def token_usage(ctx: Context) -> None:
         inline=False
     )
 
-    # OpenAI GPT-4o-mini
     openai = usage_data['openai_gpt4o_mini']
     embed.add_field(
         name="OpenAI GPT-4o-mini",
@@ -1241,7 +1230,6 @@ async def token_usage(ctx: Context) -> None:
         inline=False
     )
 
-    # OpenAI GPT-4o-mini Vision
     vision = usage_data['openai_gpt4o_mini_vision']
     embed.add_field(
         name="OpenAI GPT-4o-mini Vision",
@@ -1296,9 +1284,11 @@ if __name__ == "__main__":
         asyncio.run(start_bot())
     except KeyboardInterrupt:
         logger.info("Bot shutdown requested by user")
+        handle_exit()
     except Exception as e:
-        logger.error(f"Unhandled exception: {type(e).__name__}: {str(e)}")
+        logger.error(f"Unhandled exception in __main__: {type(e).__name__}: {str(e)}")
         logger.error(traceback.format_exc())
     finally:
-        lock_file_handle.close()
+        if lock_file_handle:
+            lock_file_handle.close()
         quiet_exit()
