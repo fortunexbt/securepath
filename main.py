@@ -1,3 +1,4 @@
+# main.py
 import asyncio
 import json
 import logging
@@ -253,12 +254,35 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
 
     messages = [{"role": "system", "content": dynamic_system_prompt}] + context_messages
 
+    # --- Start of New Search Optimization ---
+
+    # 1. Set a dynamic date filter for the last 90 days for better recency balance.
+    ninety_days_ago = (datetime.now() - timedelta(days=90)).strftime("%m/%d/%Y")
+    logger.debug(f"Perplexity search results will be filtered to after: {ninety_days_ago}")
+
+    # 2. Curate search sources to prioritize high-quality DeFi/crypto info and exclude noise.
+    preferred_domains = [
+        "ethereum.org", "solana.com", "github.com", "thedefiant.io",
+        "defillama.com", "coindesk.com", "cointelegraph.com", "etherscan.io",
+        "bloomberg.com", "reuters.com", "forbes.com", "medium.com"
+    ]
+    excluded_domains = ["-pinterest.com", "-reddit.com", "-quora.com", "-facebook.com"]
+    domain_filter = preferred_domains + excluded_domains
+    logger.debug(f"Using Perplexity domain filter with {len(domain_filter)} rules.")
+
+    # 3. Define the full data payload with optimized search parameters.
     data = {
         "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 2000, # Increased from 150 to allow longer responses
-        "search_recency_filter": "week"
+        "max_tokens": 2000,
+        "search_after_date_filter": ninety_days_ago,
+        "search_domain_filter": domain_filter,
+        "web_search_options": {
+            "search_context_size": "high"
+        }
     }
+    # --- End of New Search Optimization ---
+
 
     logger.info(f"Sending query to Perplexity API for user {user_id}")
     usage_data['perplexity']['requests'] += 1
@@ -274,12 +298,20 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
             if response.status == 200:
                 resp_json = await response.json()
                 answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
-                citations = resp_json.get('citations', [])
+                
+                # Check for citations in the response metadata
+                citations = resp_json.get('choices', [{}])[0].get('extras', {}).get('citations', [])
 
-                # format citations
+                # Format citations if they exist
                 if citations:
-                    formatted_citations = "\n\nDYOR (do your own research):\n" + "\n".join(f"- {cite}" for cite in citations)
+                    formatted_citations = "\n\n**DYOR (do your own research):**\n"
+                    # Perplexity citations are now lists of dicts with 'url' and 'title'
+                    for cite in citations:
+                        title = cite.get('title', 'Source')
+                        url = cite.get('url', '#')
+                        formatted_citations += f"- [{title}]({url})\n"
                     answer += formatted_citations
+
 
                 usage = resp_json.get('usage', {})
                 prompt_tokens = usage.get('prompt_tokens', 0)
@@ -287,6 +319,8 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                 total_tokens = usage.get('total_tokens', 0)
                 usage_data['perplexity']['tokens'] += total_tokens
 
+                # Note: The cost model for Perplexity might change with 'high' context size.
+                # This calculation is a general estimate.
                 cost = (usage_data['perplexity']['requests'] * 5 / 1000) + (usage_data['perplexity']['tokens'] / 1_000_000 * 1)
                 usage_data['perplexity']['cost'] = round(cost, 6)
                 increment_token_cost(cost)
@@ -987,19 +1021,20 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         logger.info(f"OpenAI GPT-4o-mini final summary usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
         logger.info(f"Estimated OpenAI GPT-4o-mini final summary API call cost: ${cost:.6f}")
 
-        # This command already has robust splitting logic, so we'll leave it as is.
-        # It handles more complex embeds with thumbnails and specific titles per part.
+        # Create a visually appealing embed
         embed = Embed(
             title=f"📄 48-Hour Summary for #{channel.name}",
             description=final_summary,
-            color=0x1D82B6,
+            color=0x1D82B6,  # Discord's blurple color
             timestamp=datetime.now(timezone.utc)
         )
         embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
         embed.set_thumbnail(url=channel.guild.icon.url if channel.guild.icon else None)
         embed.set_footer(text=f"Summary generated on {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}")
 
+        # Handle embed length limitations
         if len(embed.description) > 4096:
+            # Split the description into multiple embeds
             parts = [embed.description[i:i+4096] for i in range(0, len(embed.description), 4096)]
             for i, part in enumerate(parts):
                 temp_embed = Embed(
@@ -1019,12 +1054,13 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
 
         logger.info(f"Summary posted to channel {ctx.channel.name}")
 
+        # Log the interaction with truncated bot response
         await log_interaction(
             user=ctx.author,
             channel=ctx.channel,
             command=command,
             user_input=f"Summary for #{channel.name}",
-            bot_response=final_summary[:1024]
+            bot_response=final_summary[:1024]  # Preview limited to 1024 characters
         )
     except Exception as e:
         logger.error(f"Error generating final summary: {e}")
