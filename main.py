@@ -96,43 +96,7 @@ class RateLimiter:
 
 api_rate_limiter = RateLimiter(config.API_RATE_LIMIT_MAX, config.API_RATE_LIMIT_INTERVAL)
 
-# Enhanced rate limiting with per-user tracking
-user_rate_limits: Dict[int, List[float]] = {}
-MAX_REQUESTS_PER_MINUTE = 15  # Per user limit
-MAX_REQUESTS_PER_HOUR = 100   # Per user limit
-
-def check_user_rate_limit(user_id: int) -> Optional[str]:
-    """Check if user is rate limited, return error message if limited"""
-    current_time = time.time()
-    
-    if user_id not in user_rate_limits:
-        user_rate_limits[user_id] = []
-    
-    # Clean old timestamps (keep last hour)
-    user_rate_limits[user_id] = [
-        timestamp for timestamp in user_rate_limits[user_id] 
-        if current_time - timestamp <= 3600
-    ]
-    
-    # Check minute limit
-    minute_requests = [
-        timestamp for timestamp in user_rate_limits[user_id]
-        if current_time - timestamp <= 60
-    ]
-    
-    if len(minute_requests) >= MAX_REQUESTS_PER_MINUTE:
-        wait_time = 60 - int(current_time - min(minute_requests))
-        return f"⏱️ Rate limit: Maximum {MAX_REQUESTS_PER_MINUTE} requests per minute. Please wait {wait_time} seconds."
-    
-    # Check hour limit  
-    if len(user_rate_limits[user_id]) >= MAX_REQUESTS_PER_HOUR:
-        oldest_request = min(user_rate_limits[user_id])
-        wait_time = int(3600 - (current_time - oldest_request))
-        return f"⏱️ Rate limit: Maximum {MAX_REQUESTS_PER_HOUR} requests per hour. Please wait {wait_time//60}m {wait_time%60}s."
-    
-    # Add current request
-    user_rate_limits[user_id].append(current_time)
-    return None
+# No rate limiting - small server optimization
 
 def get_user_context(user_id: int) -> Deque[Dict[str, Any]]:
     return user_contexts.setdefault(user_id, deque(maxlen=config.MAX_CONTEXT_MESSAGES))
@@ -275,11 +239,7 @@ async def log_usage_to_db(user: discord.User, command: str, model: str,
             logger.error(f"Failed to log usage to database: {e}")
 
 def can_make_api_call(user_id: Optional[int] = None) -> tuple[bool, Optional[str]]:
-    """Check if API call can be made, return (can_make, error_message)"""
-    if user_id:
-        rate_limit_msg = check_user_rate_limit(user_id)
-        if rate_limit_msg:
-            return False, rate_limit_msg
+    """Check if API call can be made - no rate limiting for small server"""
     return True, None
 
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
@@ -565,9 +525,10 @@ async def send_structured_analysis_embed(
 async def send_long_embed(
     channel: discord.abc.Messageable,
     text: str,
-    color: int = 0x004200,
+    color: int = 0x1D82B6,
     title: Optional[str] = None,
-    image_url: Optional[str] = None
+    image_url: Optional[str] = None,
+    user_mention: Optional[str] = None
 ) -> None:
     if not text:
         return
@@ -591,7 +552,9 @@ async def send_long_embed(
             embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini")
 
         try:
-            await channel.send(embed=embed)
+            # Add user mention to first part if provided
+            content = user_mention if i == 0 and user_mention else None
+            await channel.send(content=content, embed=embed)
             channel_name = getattr(channel, 'name', "Direct Message")
             logger.debug(f"Sent embed part {i + 1}/{len(parts)} to {channel_name}")
         except discord.errors.HTTPException as e:
@@ -633,10 +596,8 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
         is_dm = isinstance(message.channel, discord.DMChannel)
         logger.debug(f"Processing message from user {user_id} in {'DM' if is_dm else f'channel {message.channel.id}'}")
 
-        # Rate limiting check
-        can_call, error_msg = can_make_api_call(user_id)
-        if not can_call:
-            raise Exception(error_msg)
+        # No rate limiting for small server
+        logger.debug(f"Processing !ask for user {user_id}")
         
         # Update progress: Searching
         progress_embed = status_msg.embeds[0]
@@ -671,8 +632,12 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
                 
                 update_user_context(user_id, openai_response, 'assistant')
                 
-                # Delete progress message and send final response
-                await status_msg.delete()
+                # Delete progress message and send final response (with error handling)
+                try:
+                    await status_msg.delete()
+                except discord.NotFound:
+                    # Status message was already deleted
+                    pass
                 
                 await send_long_embed(
                     message.channel, 
@@ -688,12 +653,15 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
                 # If OpenAI fails, send Perplexity response directly
                 logger.warning(f"OpenAI failed, sending Perplexity response directly: {openai_error}")
                 
-                # Update to show fallback mode
-                progress_embed.set_field_at(0, name="Status", value="🔄 Using fallback mode...", inline=False)
-                await status_msg.edit(embed=progress_embed)
-                
-                await asyncio.sleep(1)  # Brief pause for UX
-                await status_msg.delete()
+                # Update to show fallback mode (with error handling)
+                try:
+                    progress_embed.set_field_at(0, name="Status", value="🔄 Using fallback mode...", inline=False)
+                    await status_msg.edit(embed=progress_embed)
+                    await asyncio.sleep(1)  # Brief pause for UX
+                    await status_msg.delete()
+                except discord.NotFound:
+                    # Status message was already deleted or not found
+                    pass
                 
                 await send_long_embed(
                     message.channel, 
