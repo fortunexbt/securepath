@@ -442,32 +442,70 @@ async def send_structured_analysis_embed(
         if image_url:
             embed.set_image(url=image_url)
         
-        # Parse analysis into sections for better organization
-        sections = text.split('\n\n')  # Split by double newlines
+        # Parse text looking for markdown headers and natural sections
+        parsed_sections = []
+        lines = text.split('\n')
+        current_header = None
+        current_content = []
         
-        for i, section in enumerate(sections[:6]):  # Limit to 6 fields to avoid clutter
-            if section.strip():
-                # Extract title if present (lines starting with **)
-                lines = section.strip().split('\n')
-                if lines[0].startswith('**') and lines[0].endswith('**'):
-                    field_title = lines[0].strip('*')
-                    field_content = '\n'.join(lines[1:]) if len(lines) > 1 else "Analysis in progress..."
-                else:
-                    field_title = f"Analysis Part {i+1}"
-                    field_content = section.strip()
+        for line in lines:
+            line = line.strip()
+            # Look for markdown headers (# or ##)
+            if line.startswith('##') or line.startswith('#'):
+                # Save previous section
+                if current_header and current_content:
+                    parsed_sections.append((current_header, '\n'.join(current_content)))
                 
+                # Start new section with clean header
+                current_header = line.strip('#').strip()
+                current_content = []
+            # Look for bold headers (**Header**)
+            elif line.startswith('**') and line.endswith('**') and len(line.strip('*').strip()) < 80:
+                # Save previous section
+                if current_header and current_content:
+                    parsed_sections.append((current_header, '\n'.join(current_content)))
+                
+                # Start new section
+                current_header = line.strip('*').strip()
+                current_content = []
+            elif line:
+                current_content.append(line)
+        
+        # Save final section
+        if current_header and current_content:
+            parsed_sections.append((current_header, '\n'.join(current_content)))
+        
+        # If no structured sections found, try double newline split
+        if not parsed_sections:
+            sections = text.split('\n\n')
+            for i, section in enumerate(sections[:6]):
+                if section.strip():
+                    lines = section.strip().split('\n')
+                    # Try to extract a meaningful title from first line
+                    first_line = lines[0].strip()
+                    if len(first_line) < 80 and any(word in first_line.lower() for word in ['sentiment', 'analysis', 'trend', 'support', 'resistance', 'recommendation', 'outlook', 'summary', 'technical', 'price', 'volume']):
+                        header = first_line
+                        content = '\n'.join(lines[1:]) if len(lines) > 1 else section.strip()
+                    else:
+                        header = "Market Analysis"
+                        content = section.strip()
+                    parsed_sections.append((header, content))
+        
+        # Add sections as fields
+        for header, content in parsed_sections[:8]:  # Limit to 8 fields
+            if content.strip():
                 # Ensure content fits in field (1024 char limit)
-                if len(field_content) > 1000:
-                    field_content = field_content[:997] + "..."
+                if len(content) > 1000:
+                    content = content[:997] + "..."
                 
                 embed.add_field(
-                    name=f"📈 {field_title[:250]}",
-                    value=field_content or "No specific insights",
+                    name=f"📈 {header[:250]}",
+                    value=content or "No specific insights",
                     inline=False
                 )
         
-        # If no clear sections, add as single comprehensive field
-        if len(sections) <= 1:
+        # If no sections were parsed, use the full text as a single field
+        if not parsed_sections or not embed.fields:
             content = text[:1000] + "..." if len(text) > 1000 else text
             embed.add_field(name="📈 Technical Analysis", value=content, inline=False)
         
@@ -503,10 +541,12 @@ async def send_long_embed(
         else:
             embed = Embed(description=part, color=color)
 
-        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url if bot.user.avatar else None)
+        embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
         
         if len(parts) > 1:
-            embed.set_footer(text=f"Part {i + 1}/{len(parts)}")
+            embed.set_footer(text=f"SecurePath Agent • Part {i + 1}/{len(parts)} • Powered by GPT-4.1-mini")
+        else:
+            embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini")
 
         try:
             await channel.send(embed=embed)
@@ -1112,16 +1152,21 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
         status_msg = await ctx.send(embed=progress_embed)
         
         await process_message_with_streaming(ctx.message, status_msg, question=question, command='ask')
+        logger.info(f"Successfully completed ask command for user {ctx.author.id}")
         
     except Exception as e:
+        logger.error(f"Error in ask command for user {ctx.author.id}: {e}")
+        logger.error(traceback.format_exc())
+        
         # Enhanced error handling with user-friendly messages
-        error_msg = str(e) if any(emoji in str(e) for emoji in ['🚫', '⏱️', '🔑', '🌐', '⚠️', '🤷']) else "🚫 An unexpected error occurred while processing your request."
+        error_msg = str(e) if any(emoji in str(e) for emoji in ['🚫', '⏱️', '🔑', '🌐', '⚠️', '🤷']) else f"🚫 Error: {str(e)[:100]}"
         
         error_embed = discord.Embed(
             title="❌ Research Failed",
             description=error_msg,
             color=0xFF0000
         )
+        error_embed.add_field(name="Debug Info", value=f"Error type: {type(e).__name__}", inline=False)
         error_embed.add_field(name="Suggestion", value="Try rephrasing your question or wait a moment before trying again.", inline=False)
         error_embed.set_footer(text="If this persists, please contact support")
         
@@ -1131,10 +1176,9 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
                 await status_msg.edit(embed=error_embed)
             else:
                 await ctx.send(embed=error_embed)
-        except:
+        except Exception as edit_error:
+            logger.error(f"Failed to edit status message: {edit_error}")
             await ctx.send(f"{ctx.author.mention} {error_msg}")
-            
-        logger.error(f"Error in ask command for user {ctx.author.id}: {e}")
     finally:
         await reset_status()
 
@@ -1184,37 +1228,49 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
     status_msg = await ctx.send(embed=status_embed)
     
     try:
-        time_limit = datetime.now(timezone.utc) - timedelta(hours=72)  # Extended to 72 hours for better content capture
+        time_limit = datetime.now(timezone.utc) - timedelta(hours=72)  # 72 hours max for context length limits
         messages = []
         
         # Enhanced message filtering - INCLUDE bot/webhook messages for crypto channels
-        async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
+        message_count = 0
+        async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):  # Reduced limit for context
+            message_count += 1
             content = msg.content.strip()
-            # More inclusive filtering - bots often provide valuable crypto data
+            # Very inclusive filtering - crypto channels often have valuable bot data
             if (content and 
-                len(content) > 5 and  # Lower minimum length
-                not content.startswith(('!ping', '!help', '!commands', '!stats')) and  # Skip basic bot commands only
-                not content.startswith(('http://imgur.', 'http://prnt.sc'))):  # Skip image-only links
+                len(content) > 5 and  # Reasonable minimum length
+                not content.startswith(('!ping', '!help', '!commands', '!stats', '!test'))):  # Skip only basic bot commands
                 # Include ALL users including bots, webhooks, and automated feeds
                 author_name = msg.author.display_name if not msg.author.bot else f"🤖{msg.author.display_name}"
                 messages.append(f"[{author_name}]: {content}")
         
-        # If still no content, try with maximum inclusivity
-        if not messages:
-            logger.warning(f"No messages found with standard filtering in {channel.name}, trying maximum inclusivity")
-            async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
+        logger.info(f"Scanned {message_count} messages from {channel.name}, found {len(messages)} valid messages")
+        
+        # If still no content, try with absolute maximum inclusivity
+        if not messages and message_count > 0:
+            logger.warning(f"No messages passed filtering in {channel.name}, trying absolute maximum inclusivity")
+            async for msg in channel.history(after=time_limit, limit=5000, oldest_first=True):
                 content = msg.content.strip()
-                if content and len(content) > 3:  # Include everything with any content
+                if content:  # Include absolutely everything with any content
                     author_name = msg.author.display_name if not msg.author.bot else f"🤖{msg.author.display_name}"
                     messages.append(f"[{author_name}]: {content}")
 
         logger.info(f"Found {len(messages)} quality messages to summarize in channel {channel.name}")
 
         if not messages:
-            # Try one more time with absolute maximum inclusivity for debugging
+            # Debug: check what messages actually exist
             debug_count = 0
             bot_count = 0
-            async for msg in channel.history(after=time_limit, limit=1000, oldest_first=True):
+            recent_count = 0
+            
+            # Check recent messages (last 24 hours)
+            recent_limit = datetime.now(timezone.utc) - timedelta(hours=24)
+            async for msg in channel.history(after=recent_limit, limit=1000):
+                if msg.content.strip():
+                    recent_count += 1
+            
+            # Check all messages in timeframe
+            async for msg in channel.history(after=time_limit, limit=2000):
                 if msg.content.strip():
                     debug_count += 1
                     if msg.author.bot:
@@ -1227,7 +1283,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             )
             error_embed.add_field(
                 name="Debug Info", 
-                value=f"Total messages: {debug_count}\nBot messages: {bot_count}\nFiltered messages: 0", 
+                value=f"Messages (72h): {debug_count}\nMessages (24h): {recent_count}\nBot messages: {bot_count}\nFiltered messages: 0", 
                 inline=False
             )
             error_embed.add_field(
@@ -1417,30 +1473,34 @@ CHUNK SUMMARIES:
             # Enhanced summary embed with metadata
             summary_embed = discord.Embed(
                 title=f"📄 {channel.name.title()} Intelligence Report",
-                description=f"**Timeframe:** Last 48 hours | **Messages Analyzed:** {len(messages):,}",
+                description=f"**Timeframe:** Last 72 hours | **Messages Analyzed:** {len(messages):,}",
                 color=0x1D82B6,
                 timestamp=datetime.now(timezone.utc)
             )
             
-            # Split long summary into fields for better readability
-            sections = final_summary.split('**')
-            current_field = ""
-            
-            for section in sections:
-                if section.strip():
-                    if len(current_field + section) > 1000:
-                        if current_field:
-                            summary_embed.add_field(name="Analysis", value=current_field, inline=False)
-                        current_field = section
-                    else:
-                        current_field += f"**{section}" if current_field else section
-            
-            if current_field:
-                summary_embed.add_field(name="Analysis", value=current_field[:1024], inline=False)
-            
+            # Simple, reliable embed creation to avoid breaking
             summary_embed.set_footer(text=f"SecurePath Agent • Cost: ${total_cost:.4f} | Processed {len(chunks)} chunks")
             
-            await ctx.send(embed=summary_embed)
+            # Use reliable content delivery
+            try:
+                # If summary is short enough, use single embed
+                if len(final_summary) <= 3800:  # Leave room for description
+                    summary_embed.description += f"\n\n{final_summary}"
+                    await ctx.send(embed=summary_embed)
+                else:
+                    # For long summaries, send title embed first, then use send_long_embed
+                    await ctx.send(embed=summary_embed)
+                    await send_long_embed(
+                        ctx.channel,
+                        final_summary,
+                        color=0x1D82B6,
+                        title="📈 Detailed Analysis"
+                    )
+            except discord.HTTPException as e:
+                logger.error(f"Failed to send summary embed: {e}")
+                # Fallback to simple text message
+                fallback_text = f"**{channel.name.title()} Summary (72h) - {len(messages):,} messages**\n\n{final_summary[:1800]}{'...' if len(final_summary) > 1800 else ''}"
+                await ctx.send(fallback_text)
             logger.info(f"Successfully sent enhanced summary for channel {channel.name} (Cost: ${total_cost:.4f})")
 
             await log_interaction(user=ctx.author, channel=ctx.channel, command=command, user_input=f"Summary for #{channel.name}", bot_response=final_summary[:1024])
