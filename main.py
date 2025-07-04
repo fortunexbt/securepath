@@ -798,13 +798,10 @@ async def on_ready() -> None:
     else:
         logger.error("Failed to connect to database - usage tracking will be limited")
     
-    await send_initial_stats()
+    await send_startup_notification()
     if not change_status.is_running():
         change_status.start()
         logger.info("Started rotating status messages.")
-    if not send_periodic_stats.is_running():
-        send_periodic_stats.start()
-        logger.info("Started periodic stats task.")
     if not reset_api_call_counter.is_running():
         reset_api_call_counter.start()
         logger.info("Started API call counter reset task.")
@@ -838,18 +835,55 @@ async def preload_user_messages(user_id: int, channel: discord.DMChannel) -> Non
         user_contexts[user_id] = deque(reversed(messages), maxlen=config.MAX_CONTEXT_MESSAGES)
         logger.info(f"Preloaded {len(user_contexts[user_id])} messages for user {user_id} in DMs.")
 
-startup_stats_sent = False
-
-async def send_initial_stats() -> None:
-    global startup_stats_sent
-    if startup_stats_sent:
-        logger.debug("Startup stats already sent, skipping")
+async def send_startup_notification() -> None:
+    """Send deployment notification with version info"""
+    startup_time = time.time()
+    await asyncio.sleep(2)  # Brief wait for bot to stabilize
+    
+    channel = bot.get_channel(config.LOG_CHANNEL_ID)
+    if not channel:
+        logger.warning("Admin channel not found for startup notification")
         return
     
-    await asyncio.sleep(5)  # Wait for bot to fully initialize
-    await send_stats()
-    startup_stats_sent = True
-    logger.info("Initial startup stats completed")
+    # Get git commit hash for version tracking
+    try:
+        import subprocess
+        git_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'], 
+                                         stderr=subprocess.DEVNULL).decode().strip()
+        version_info = f"`{git_hash}`"
+    except:
+        version_info = "unknown"
+    
+    # Calculate startup time
+    init_time = time.time() - startup_time
+    
+    embed = discord.Embed(
+        title="🚀 Bot Started!",
+        description=f"SecurePath Agent deployed and online",
+        color=0x00ff00,  # Green for success
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(name="Version", value=version_info, inline=True)
+    embed.add_field(name="Startup Time", value=f"{init_time:.2f}s", inline=True)
+    embed.add_field(name="Guilds", value=str(len(bot.guilds)), inline=True)
+    
+    # Database status
+    db_status = "🟢 Connected" if db_manager.pool else "🔴 Offline"
+    embed.add_field(name="Database", value=db_status, inline=True)
+    embed.add_field(name="Latency", value=f"{bot.latency*1000:.0f}ms", inline=True)
+    
+    # Heroku dyno info if available
+    dyno_name = os.environ.get('DYNO', 'local')
+    embed.add_field(name="Dyno", value=f"`{dyno_name}`", inline=True)
+    
+    embed.set_footer(text="Ready for commands • Mario's crypto agent")
+    
+    try:
+        await channel.send(embed=embed)
+        logger.info(f"Startup notification sent - Version: {version_info}, Init: {init_time:.2f}s")
+    except discord.HTTPException as e:
+        logger.error(f"Failed to send startup notification: {e}")
 
 @bot.command(name='analyze')
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
@@ -1695,13 +1729,7 @@ async def send_stats() -> None:
     except discord.HTTPException as e:
         logger.error(f"Failed to send startup stats embed: {e}")
 
-@tasks.loop(hours=12)
-async def send_periodic_stats() -> None:
-    # Skip first run to avoid duplicate with initial stats
-    if send_periodic_stats.current_loop == 0:
-        logger.debug("Skipping first periodic stats run to avoid duplicate")
-        return
-    await send_stats()
+# Removed periodic stats - only startup notifications needed
 
 @tasks.loop(hours=24)
 async def reset_api_call_counter():
