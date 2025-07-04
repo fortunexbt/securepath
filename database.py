@@ -108,6 +108,27 @@ class DatabaseManager:
                     )
                 ''')
                 
+                # User queries table for storing all user inputs
+                await conn.execute('''
+                    CREATE TABLE IF NOT EXISTS user_queries (
+                        id SERIAL PRIMARY KEY,
+                        user_id BIGINT NOT NULL,
+                        username VARCHAR(255),
+                        command VARCHAR(50) NOT NULL,
+                        query_text TEXT NOT NULL,
+                        channel_id BIGINT,
+                        guild_id BIGINT,
+                        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                        response_generated BOOLEAN DEFAULT FALSE,
+                        error_occurred BOOLEAN DEFAULT FALSE
+                    )
+                ''')
+                
+                # Create indexes for better performance on queries table
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_queries_user_id ON user_queries(user_id)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON user_queries(timestamp)')
+                await conn.execute('CREATE INDEX IF NOT EXISTS idx_queries_command ON user_queries(command)')
+                
                 logger.info("Database tables initialized successfully")
                 
         except Exception as e:
@@ -162,6 +183,25 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Failed to log usage: {e}")
+            return False
+    
+    async def log_user_query(self, user_id: int, username: str, command: str, 
+                           query_text: str, channel_id: Optional[int] = None, 
+                           guild_id: Optional[int] = None, response_generated: bool = False, 
+                           error_occurred: bool = False) -> bool:
+        """Log a user query to the database"""
+        try:
+            async with self.pool.acquire() as conn:
+                await conn.execute('''
+                    INSERT INTO user_queries 
+                    (user_id, username, command, query_text, channel_id, guild_id, response_generated, error_occurred)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                ''', user_id, username, command, query_text, channel_id, guild_id, response_generated, error_occurred)
+                
+                return True
+                
+        except Exception as e:
+            logger.error(f"Failed to log user query: {e}")
             return False
     
     async def get_user_stats(self, user_id: int) -> Optional[Dict[str, Any]]:
@@ -278,6 +318,57 @@ class DatabaseManager:
                 
         except Exception as e:
             logger.error(f"Failed to get model costs: {e}")
+            return None
+    
+    async def get_query_analytics(self) -> Optional[Dict[str, Any]]:
+        """Get analytics on user queries and popular topics"""
+        try:
+            async with self.pool.acquire() as conn:
+                # Most common query topics (using simple keyword analysis)
+                popular_queries = await conn.fetch('''
+                    SELECT 
+                        query_text,
+                        command,
+                        COUNT(*) as frequency,
+                        username
+                    FROM user_queries 
+                    WHERE timestamp >= NOW() - INTERVAL '7 days'
+                    ORDER BY frequency DESC
+                    LIMIT 20
+                ''')
+                
+                # Query patterns by command
+                command_patterns = await conn.fetch('''
+                    SELECT 
+                        command,
+                        COUNT(*) as total_queries,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        AVG(LENGTH(query_text)) as avg_query_length
+                    FROM user_queries
+                    WHERE timestamp >= NOW() - INTERVAL '7 days'
+                    GROUP BY command
+                    ORDER BY total_queries DESC
+                ''')
+                
+                # Most active query times
+                hourly_activity = await conn.fetch('''
+                    SELECT 
+                        EXTRACT(HOUR FROM timestamp) as hour,
+                        COUNT(*) as query_count
+                    FROM user_queries
+                    WHERE timestamp >= NOW() - INTERVAL '7 days'
+                    GROUP BY EXTRACT(HOUR FROM timestamp)
+                    ORDER BY query_count DESC
+                ''')
+                
+                return {
+                    'popular_queries': [dict(row) for row in popular_queries],
+                    'command_patterns': [dict(row) for row in command_patterns],
+                    'hourly_activity': [dict(row) for row in hourly_activity]
+                }
+                
+        except Exception as e:
+            logger.error(f"Failed to get query analytics: {e}")
             return None
 
 # Global database manager instance
