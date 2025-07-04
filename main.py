@@ -237,9 +237,7 @@ async def log_usage_to_db(user: discord.User, command: str, model: str,
             logger.error(f"Failed to log usage to database: {e}")
 
 def can_make_api_call() -> bool:
-    if api_call_counter >= config.DAILY_API_CALL_LIMIT:
-        logger.debug(f"API call limit reached: {api_call_counter}/{config.DAILY_API_CALL_LIMIT}")
-        return False
+    # Removed API call limits for maximum performance with small user base
     return True
 
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
@@ -485,10 +483,7 @@ async def log_interaction(user: discord.User, channel: discord.abc.Messageable, 
         logger.error(f"Failed to send interaction log embed: {str(e)}")
 
 async def process_message(message: discord.Message, question: Optional[str] = None, command: Optional[str] = None) -> None:
-    if api_rate_limiter.is_rate_limited(message.author.id):
-        await message.channel.send("You are sending messages too quickly. Please slow down.")
-        logger.info(f"Rate limited user {message.author.id}")
-        return
+    # Removed rate limiting for maximum performance with small user base
 
     if question is None:
         question = message.content.strip()
@@ -642,7 +637,6 @@ async def send_initial_stats() -> None:
     await send_stats()
 
 @bot.command(name='analyze')
-@commands.cooldown(1, 10, commands.BucketType.user)
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
     logger.debug("Status updated to: [watching] image analysis...")
@@ -789,7 +783,6 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
         return "An error occurred during image analysis. Please try again later."
 
 @bot.command(name='ask')
-@commands.cooldown(1, 10, commands.BucketType.user)
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="a question..."))
     logger.debug("Status updated to: [watching] a question...")
@@ -804,7 +797,6 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     await reset_status()
 
 @bot.command(name='summary')
-@commands.cooldown(1, 10, commands.BucketType.user)
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.playing, name="channel summary..."))
     logger.debug("Status updated to: [playing] channel summary...")
@@ -842,25 +834,28 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             return
 
         full_text = "\n".join(messages)
-        chunk_size, chunk_summaries = 8000, []
+        # Optimize for speed: larger chunks = fewer API calls = faster processing
+        chunk_size, chunk_summaries = 12000, []
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
 
-        logger.info(f"Processing {len(chunks)} chunks for summary")
-
-        for i, chunk in enumerate(chunks):
-            if not can_make_api_call(): 
-                logger.warning(f"API call limit reached at chunk {i+1}")
-                break
+        logger.info(f"Processing {len(chunks)} chunks for summary (optimized for speed)")
+        
+        # Process chunks concurrently for maximum speed
+        async def process_chunk(i, chunk):
             prompt = f"Extract key alpha from these {channel.name} messages. Focus on:\n• Market sentiment signals\n• Price/volume anomalies\n• Breaking news impact\n• Whale movements\n• Technical patterns\n• Regulatory updates\n\nFormat as bullet points. Be concise, no fluff:\n\n{chunk}"
             try:
-                response = await aclient.chat.completions.create(model='gpt-4.1-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
-                chunk_summaries.append(response.choices[0].message.content.strip())
+                response = await aclient.chat.completions.create(
+                    model='gpt-4.1-mini', 
+                    messages=[{"role": "user", "content": prompt}], 
+                    max_tokens=1200  # Reduced for faster processing
+                )
+                result = response.choices[0].message.content.strip()
                 increment_api_call_counter()
                 
                 # Log chunk processing to database
                 if hasattr(response, 'usage') and response.usage:
                     usage = response.usage
-                    input_tokens = getattr(usage, 'prompt_tokens', 500)  # Estimate if not available
+                    input_tokens = getattr(usage, 'prompt_tokens', 500)
                     output_tokens = getattr(usage, 'completion_tokens', 300)
                     cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
                     
@@ -876,8 +871,17 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                     )
                 
                 logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
+                return result
             except Exception as e:
                 logger.error(f"Error summarizing chunk {i+1}: {e}")
+                return None
+
+        # Process all chunks concurrently for maximum speed
+        tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter out None results and exceptions
+        chunk_summaries = [r for r in results if r and not isinstance(r, Exception)]
 
         if not chunk_summaries:
             await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
@@ -1064,56 +1068,56 @@ def calculate_cache_hit_rate() -> float:
     total_input = usage_data['openai_gpt41_mini']['input_tokens'] + total_cached
     return (total_cached / total_input * 100) if total_input > 0 else 0.0
 
-@bot.command(name='my_stats')
-@commands.cooldown(1, 30, commands.BucketType.user)
-async def my_stats(ctx: Context) -> None:
-    """Show user's personal usage statistics"""
+@bot.command(name='stats')
+async def server_stats(ctx: Context) -> None:
+    """Show server-wide bot usage statistics"""
     if not db_manager.pool:
         await ctx.send("Database not available. Stats tracking is currently offline.")
         return
     
-    user_stats = await db_manager.get_user_stats(ctx.author.id)
-    if not user_stats:
-        await ctx.send("No usage data found for your account.")
+    stats = await db_manager.get_global_stats()
+    if not stats:
+        await ctx.send("Failed to retrieve server statistics.")
         return
     
-    user_data = user_stats['user_data']
-    command_stats = user_stats['command_stats']
-    recent_activity = user_stats['recent_activity']
+    overall = stats['overall']
+    top_users = stats['top_users']
+    top_commands = stats['top_commands']
     
     embed = discord.Embed(
-        title=f"📊 Usage Stats for {ctx.author.name}",
-        color=0x1D82B6,
+        title="📊 Server Bot Statistics",
+        description="Usage analytics for this server",
+        color=0x00ff00,
         timestamp=datetime.now(timezone.utc)
     )
     
-    # Overall stats
+    # Overall stats (without costs)
     embed.add_field(
-        name="📈 Overall",
-        value=f"**Total Requests:** {user_data['total_requests']}\n"
-              f"**Total Tokens:** {user_data['total_tokens']:,}\n"
-              f"**Total Cost:** ${user_data['total_cost']:.4f}\n"
-              f"**Member Since:** {user_data['first_interaction'].strftime('%Y-%m-%d')}",
+        name="📈 Overall Usage",
+        value=f"**Total Requests:** {overall['total_requests']:,}\n"
+              f"**Active Users:** {overall['unique_users']:,}\n"
+              f"**Total Tokens:** {overall['total_tokens']:,}\n"
+              f"**Avg Tokens/Request:** {overall['avg_tokens_per_request']:.1f}",
         inline=True
     )
     
-    # Command breakdown
-    if command_stats:
-        top_commands = command_stats[:3]  # Top 3 commands
-        command_text = "\n".join([
-            f"**{cmd['command']}:** {cmd['count']} uses (${cmd['cost']:.4f})"
-            for cmd in top_commands
+    # Top users (without costs)
+    if top_users:
+        top_users_text = "\n".join([
+            f"**{user['username'][:20]}:** {user['total_requests']} requests"
+            for user in top_users[:8]
         ])
-        embed.add_field(name="🎯 Top Commands", value=command_text, inline=True)
+        embed.add_field(name="👑 Most Active Users", value=top_users_text, inline=True)
     
-    # Recent activity
-    if recent_activity:
-        recent_text = "\n".join([
-            f"**{act['date']}:** {act['requests']} requests"
-            for act in recent_activity[:5]
+    # Top commands
+    if top_commands:
+        top_commands_text = "\n".join([
+            f"**{cmd['command']}:** {cmd['usage_count']} uses"
+            for cmd in top_commands[:6]
         ])
-        embed.add_field(name="📅 Recent Activity", value=recent_text, inline=False)
+        embed.add_field(name="🎯 Popular Commands", value=top_commands_text, inline=False)
     
+    embed.set_footer(text="Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
 
 @bot.command(name='global_stats')
@@ -1243,9 +1247,9 @@ async def commands_help(ctx: Context) -> None:
     )
     
     embed.add_field(
-        name="📈 !my_stats",
-        value="View your personal usage statistics and costs\n"
-              "See your command usage and token consumption",
+        name="📈 !stats",
+        value="View server-wide usage statistics\n"
+              "See popular commands and active users",
         inline=True
     )
     
