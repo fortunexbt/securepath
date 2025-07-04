@@ -1697,6 +1697,10 @@ async def send_stats() -> None:
 
 @tasks.loop(hours=12)
 async def send_periodic_stats() -> None:
+    # Skip first run to avoid duplicate with initial stats
+    if send_periodic_stats.current_loop == 0:
+        logger.debug("Skipping first periodic stats run to avoid duplicate")
+        return
     await send_stats()
 
 @tasks.loop(hours=24)
