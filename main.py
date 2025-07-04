@@ -64,7 +64,7 @@ usage_data = {
         'tokens': 0,
         'cost': 0.0,
     },
-    'openai_gpt41_mini': {
+    'openai_gpt41': {
         'input_tokens': 0,
         'cached_input_tokens': 0,  # New field for cached tokens
         'cost': 0.0,
@@ -280,31 +280,33 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     # 1. Set a dynamic date filter for the last 90 days.
     ninety_days_ago = (datetime.now() - timedelta(days=90)).strftime("%m/%d/%Y")
     
-    # 2. Curate an elite, TOP-10 search source list to respect the API limit.
+    # 2. Optimized domain filter for crypto/DeFi research with authoritative sources
     domain_filter = [
-        "github.com",          # Primary Source: Code
-        "ethereum.org",        # Primary Source: Docs
-        "solana.com",          # Primary Source: Docs
-        "defillama.com",       # Primary Source: Data
-        "etherscan.io",        # Primary Source: On-chain activity
-        "medium.com",          # Secondary Source: Project blogs/updates
-        "coindesk.com",        # Secondary Source: Reputable News
-        "thedefiant.io",       # Secondary Source: Reputable DeFi News
-        "-reddit.com",         # Exclusion: High noise
+        "ethereum.org",        # Primary: Official Ethereum docs
+        "github.com",          # Primary: Source code & repos
+        "defillama.com",       # Primary: DeFi analytics
+        "etherscan.io",        # Primary: On-chain data
+        "coinmarketcap.com",   # Primary: Market data
+        "coingecko.com",       # Primary: Market data
+        "docs.uniswap.org",    # Primary: Protocol docs
+        "coindesk.com",        # Secondary: Reputable news
+        "-reddit.com",         # Exclusion: Forum noise
         "-pinterest.com"       # Exclusion: Irrelevant
     ]
     logger.debug(f"Using Perplexity domain filter with {len(domain_filter)} elite sources.")
 
-    # 3. Define the full data payload with optimized search parameters.
+    # 3. Define the full data payload with optimized search parameters for better citations
     data = {
         "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 1000,
+        "max_tokens": 1500,
+        "temperature": 0.2,  # Lower temperature for more factual responses
         "search_after_date_filter": ninety_days_ago,
         "search_domain_filter": domain_filter,
-        "web_search_options": {
-            "search_context_size": "high"
-        }
+        "search_recency_filter": "month",  # Focus on recent content
+        "search_context_size": "high",  # Maximum citation coverage
+        "return_citations": True,  # Ensure citations are returned
+        "return_images": False  # Disable images for faster response
     }
     # --- End of Corrected Search Optimization ---
 
@@ -324,14 +326,35 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                 resp_json = await response.json()
                 answer = resp_json.get('choices', [{}])[0].get('message', {}).get('content', '')
                 
+                # Enhanced citation processing for better source verification
                 citations = resp_json.get('choices', [{}])[0].get('extras', {}).get('citations', [])
-
-                if citations:
-                    formatted_citations = "\n\n**DYOR (do your own research):**\n"
-                    for cite in citations:
-                        title = cite.get('title', 'Source')
-                        url = cite.get('url', '#')
-                        formatted_citations += f"- [{title}]({url})\n"
+                search_results = resp_json.get('search_results', [])
+                
+                # Combine both citation sources for comprehensive referencing
+                all_sources = []
+                
+                # Process traditional citations
+                for cite in citations:
+                    title = cite.get('title', 'Source')
+                    url = cite.get('url', '#')
+                    if url != '#' and title != 'Source':
+                        all_sources.append((title, url))
+                
+                # Process search_results for additional sources
+                for result in search_results:
+                    title = result.get('title', '')
+                    url = result.get('url', '')
+                    if url and title and (title, url) not in all_sources:
+                        all_sources.append((title, url))
+                
+                if all_sources:
+                    formatted_citations = "\n\n**📚 Sources & Citations:**\n"
+                    for i, (title, url) in enumerate(all_sources[:8], 1):  # Limit to 8 sources
+                        # Truncate long titles for better formatting
+                        display_title = title[:80] + "..." if len(title) > 80 else title
+                        formatted_citations += f"{i}. [{display_title}]({url})\n"
+                    
+                    formatted_citations += "\n*DYOR: Always verify information from original sources*"
                     answer += formatted_citations
 
                 usage = resp_json.get('usage', {})
@@ -372,7 +395,7 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
 
     try:
         response = await aclient.chat.completions.create(
-            model='gpt-4.1-mini',
+            model='gpt-4.1',
             messages=messages,
             max_tokens=2000,
             temperature=0.7,
@@ -391,15 +414,15 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
         is_cached = cached_tokens >= 1024
 
         if is_cached:
-            usage_data['openai_gpt41_mini']['cached_input_tokens'] += cached_tokens
-            cost = (cached_tokens / 1_000_000 * 0.20) + (completion_tokens / 1_000_000 * 0.80)  # GPT-4.1-mini cached pricing
+            usage_data['openai_gpt41']['cached_input_tokens'] += cached_tokens
+            cost = (cached_tokens / 1_000_000 * 0.30) + (completion_tokens / 1_000_000 * 1.20)  # GPT-4.1 cached pricing
             logger.debug(f"Cache hit detected. Cached Tokens: {cached_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
         else:
-            usage_data['openai_gpt41_mini']['input_tokens'] += prompt_tokens
-            cost = (prompt_tokens / 1_000_000 * 0.40) + (completion_tokens / 1_000_000 * 1.60)  # GPT-4.1-mini pricing
+            usage_data['openai_gpt41']['input_tokens'] += prompt_tokens
+            cost = (prompt_tokens / 1_000_000 * 0.60) + (completion_tokens / 1_000_000 * 2.40)  # GPT-4.1 pricing
             logger.debug(f"No cache hit. Prompt Tokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
 
-        usage_data['openai_gpt41_mini']['cost'] += cost
+        usage_data['openai_gpt41']['cost'] += cost
         increment_token_cost(cost)
         
         # Log to database if user provided
@@ -407,7 +430,7 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
             await log_usage_to_db(
                 user=user,
                 command=command,
-                model="gpt-4.1-mini",
+                model="gpt-4.1",
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 cached_tokens=cached_tokens,
@@ -416,8 +439,8 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
                 channel_id=channel_id
             )
 
-        logger.info(f"OpenAI GPT-4.1-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-        logger.info(f"Estimated OpenAI GPT-4.1-mini API call cost: ${cost:.6f}")
+        logger.info(f"OpenAI GPT-4.1 usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI GPT-4.1 API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
@@ -512,7 +535,7 @@ async def send_structured_analysis_embed(
             embed.add_field(name="📈 Technical Analysis", value=content, inline=False)
         
         embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
-        embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini Vision")
+        embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 Vision")
         
         content = user_mention if user_mention else None
         await channel.send(content=content, embed=embed)
@@ -547,9 +570,9 @@ async def send_long_embed(
         embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
         
         if len(parts) > 1:
-            embed.set_footer(text=f"SecurePath Agent • Part {i + 1}/{len(parts)} • Powered by GPT-4.1-mini")
+            embed.set_footer(text=f"SecurePath Agent • Part {i + 1}/{len(parts)} • Powered by GPT-4.1")
         else:
-            embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini")
+            embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1")
 
         try:
             # Add user mention to first part if provided
@@ -613,7 +636,7 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
             update_user_context(user_id, question or message.content, 'user')
             
             # Update progress: Analyzing
-            progress_embed.set_field_at(0, name="Status", value="🧑‍💻 Analyzing with GPT-4.1-mini...", inline=False)
+            progress_embed.set_field_at(0, name="Status", value="🧑‍💻 Analyzing with GPT-4.1...", inline=False)
             await status_msg.edit(embed=progress_embed)
             
             try:
@@ -936,7 +959,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
 
         try:
             # Update progress: Processing image
-            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with GPT-4.1-mini Vision...", inline=False)
+            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with GPT-4.1 Vision...", inline=False)
             await status_msg.edit(embed=progress_embed)
             
             guild_id = ctx.guild.id if ctx.guild else None
@@ -1012,7 +1035,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             value="`!analyze Look for support and resistance levels`", 
             inline=False
         )
-        help_embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini Vision")
+        help_embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 Vision")
         await ctx.send(embed=help_embed)
         logger.warning("No image URL detected for analysis.")
 
@@ -1046,7 +1069,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
         full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
         response = await aclient.chat.completions.create(
-            model="gpt-4.1-mini",
+            model="gpt-4.1",
             messages=[
                 {
                     "role": "user",
@@ -1065,7 +1088,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
         # Update usage data - a simplified estimation as token count is complex
         # A more accurate method would parse the usage from the response if available
         estimated_tokens = 1000  # A rough estimate for a complex image
-        cost = (estimated_tokens / 1_000_000) * 0.40  # GPT-4.1-mini input pricing
+        cost = (estimated_tokens / 1_000_000) * 0.60  # GPT-4.1 input pricing
         
         usage_data['openai_gpt41_mini_vision']['requests'] += 1
         usage_data['openai_gpt41_mini_vision']['tokens'] += estimated_tokens
@@ -1077,7 +1100,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
             await log_usage_to_db(
                 user=user,
                 command="analyze",
-                model="gpt-4.1-mini-vision",
+                model="gpt-4.1-vision",
                 input_tokens=estimated_tokens,
                 output_tokens=500,  # Rough estimate
                 cost=cost,
@@ -1085,7 +1108,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
                 channel_id=channel_id
             )
         
-        logger.info(f"Estimated OpenAI GPT-4.1-mini Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
+        logger.info(f"Estimated OpenAI GPT-4.1 Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
         return analysis
 
     except Exception as e:
@@ -1341,7 +1364,7 @@ MESSAGES:
             for attempt in range(2):  # Retry logic
                 try:
                     response = await aclient.chat.completions.create(
-                        model='gpt-4.1-mini', 
+                        model='gpt-4.1', 
                         messages=[{"role": "user", "content": prompt}], 
                         max_tokens=1500,  # Increased for better quality
                         temperature=0.3  # Lower temperature for more focused output
@@ -1442,7 +1465,7 @@ CHUNK SUMMARIES:
         
         try:
             response = await aclient.chat.completions.create(
-                model='gpt-4.1-mini', 
+                model='gpt-4.1', 
                 messages=[{"role": "user", "content": final_prompt}], 
                 max_tokens=2500,  # Increased for comprehensive output
                 temperature=0.2   # Lower for more focused synthesis
@@ -1469,7 +1492,7 @@ CHUNK SUMMARIES:
             await log_usage_to_db(
                 user=ctx.author,
                 command="summary",
-                model="gpt-4.1-mini",
+                model="gpt-4.1",
                 input_tokens=total_input,
                 output_tokens=total_output,
                 cost=total_cost,
@@ -1659,7 +1682,7 @@ async def send_stats() -> None:
     else:
         embed.add_field(name="📊 Usage Stats", value="Database offline", inline=True)
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
     
     try:
         await channel.send(embed=embed)
@@ -1701,7 +1724,7 @@ async def cache_stats(ctx: Context) -> None:
         await ctx.send("You do not have permission to use this command.")
         return
     hit_rate = calculate_cache_hit_rate()
-    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4.1-mini Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
+    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4.1 Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
     await ctx.send(embed=embed)
 
 def calculate_cache_hit_rate() -> float:
@@ -1805,7 +1828,7 @@ async def unified_stats(ctx: Context) -> None:
         inline=True
     )
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
 
 
@@ -1831,7 +1854,7 @@ async def commands_help(ctx: Context) -> None:
     
     embed.add_field(
         name="📊 !analyze [image]",
-        value="Advanced chart analysis using GPT-4.1-mini Vision\n"
+        value="Advanced chart analysis using GPT-4.1 Vision\n"
               "Attach an image or use recent chart in channel\n"
               "Gets sentiment, key levels, patterns, and trade setups",
         inline=False
@@ -1861,7 +1884,7 @@ async def commands_help(ctx: Context) -> None:
         inline=True
     )
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
 
 @bot.command(name='ping')
@@ -1888,7 +1911,7 @@ async def ping(ctx: Context) -> None:
     embed.add_field(name="Response Time", value=f"{response_time}ms", inline=True)
     embed.add_field(name="Database", value=db_status, inline=True)
     embed.add_field(name="API Calls Today", value=f"{api_call_counter}", inline=True)
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
     
     await message.edit(content="", embed=embed)
 
