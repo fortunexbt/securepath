@@ -812,12 +812,13 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         )
 
         if image_analysis:
-            await send_long_embed(
+            await send_structured_analysis_embed(
                 ctx.channel,
                 text=image_analysis,
-                color=0x00ff00,
-                title="Image Analysis",
-                image_url=chart_url
+                color=0x1D82B6,
+                title="📈 Chart Analysis",
+                image_url=chart_url,
+                user_mention=ctx.author.mention
             )
             logger.info(f"Sent image analysis to channel {ctx.channel.name}")
             await log_interaction(
