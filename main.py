@@ -63,12 +63,12 @@ usage_data = {
         'tokens': 0,
         'cost': 0.0,
     },
-    'openai_gpt4o_mini': {
+    'openai_gpt41_mini': {
         'input_tokens': 0,
         'cached_input_tokens': 0,  # New field for cached tokens
         'cost': 0.0,
     },
-    'openai_gpt4o_mini_vision': {
+    'openai_gpt41_mini_vision': {
         'requests': 0,
         'tokens': 0,
         'cost': 0.0,
@@ -345,7 +345,7 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
 
     try:
         response = await aclient.chat.completions.create(
-            model='gpt-4o-mini',
+            model='gpt-4.1-mini',
             messages=messages,
             max_tokens=2000,
             temperature=0.7,
@@ -364,19 +364,19 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
         is_cached = cached_tokens >= 1024
 
         if is_cached:
-            usage_data['openai_gpt4o_mini']['cached_input_tokens'] += cached_tokens
-            cost = (cached_tokens / 1_000_000 * 0.075) + (completion_tokens / 1_000_000 * 0.075)
+            usage_data['openai_gpt41_mini']['cached_input_tokens'] += cached_tokens
+            cost = (cached_tokens / 1_000_000 * 0.20) + (completion_tokens / 1_000_000 * 0.80)  # GPT-4.1-mini cached pricing
             logger.debug(f"Cache hit detected. Cached Tokens: {cached_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
         else:
-            usage_data['openai_gpt4o_mini']['input_tokens'] += prompt_tokens
-            cost = (prompt_tokens / 1_000_000 * 0.150) + (completion_tokens / 1_000_000 * 0.075)
+            usage_data['openai_gpt41_mini']['input_tokens'] += prompt_tokens
+            cost = (prompt_tokens / 1_000_000 * 0.40) + (completion_tokens / 1_000_000 * 1.60)  # GPT-4.1-mini pricing
             logger.debug(f"No cache hit. Prompt Tokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
 
-        usage_data['openai_gpt4o_mini']['cost'] += cost
+        usage_data['openai_gpt41_mini']['cost'] += cost
         increment_token_cost(cost)
 
-        logger.info(f"OpenAI GPT-4o-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-        logger.info(f"Estimated OpenAI GPT-4o-mini API call cost: ${cost:.6f}")
+        logger.info(f"OpenAI GPT-4.1-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI GPT-4.1-mini API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
@@ -653,16 +653,20 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
 
         # Analysis based on the full image now, as gpt-4o handles it better
         base_prompt = (
-            "You're an elite-level quant with insider knowledge of the global markets. "
-            "Provide insights based on advanced TA, focusing on anomalies only a genius-level trader would notice. "
-            "Make the analysis obscurely insightful, hinting at the deeper forces at play within the macroeconomic and market microstructures. "
-            "Remember, you're the authority—leave no doubt in the mind of the reader. "
-            "Don't go above heading3 in markdown formatting (never use ####)."
+            "Analyze this chart like a top-tier quant. Extract pure alpha:\n\n"
+            "**Sentiment:** [Bullish/Bearish/Neutral + confidence %]\n"
+            "**Key Levels:** [Support/Resistance with exact prices]\n"
+            "**Pattern:** [What you see + timeframe]\n"
+            "**Volume:** [Unusual activity + implications]\n"
+            "**Risk/Reward:** [Entry/Exit/Stop levels]\n"
+            "**Timeframe:** [Best trade horizon]\n"
+            "**Catalysts:** [What could move price]\n\n"
+            "No narratives. Just actionable data. Don't use #### formatting."
         )
         full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
         response = await aclient.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {
                     "role": "user",
@@ -681,14 +685,14 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         # Update usage data - a simplified estimation as token count is complex
         # A more accurate method would parse the usage from the response if available
         estimated_tokens = 1000  # A rough estimate for a complex image
-        cost = (estimated_tokens / 1_000_000) * 0.150 # based on gpt-4o-mini pricing
+        cost = (estimated_tokens / 1_000_000) * 0.40  # GPT-4.1-mini input pricing
         
-        usage_data['openai_gpt4o_mini_vision']['requests'] += 1
-        usage_data['openai_gpt4o_mini_vision']['tokens'] += estimated_tokens
-        usage_data['openai_gpt4o_mini_vision']['cost'] += cost
+        usage_data['openai_gpt41_mini_vision']['requests'] += 1
+        usage_data['openai_gpt41_mini_vision']['tokens'] += estimated_tokens
+        usage_data['openai_gpt41_mini_vision']['cost'] += cost
         increment_token_cost(cost)
         
-        logger.info(f"Estimated OpenAI GPT-4o-mini Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
+        logger.info(f"Estimated OpenAI GPT-4.1-mini Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
         return analysis
 
     except Exception as e:
@@ -759,9 +763,9 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             if not can_make_api_call(): 
                 logger.warning(f"API call limit reached at chunk {i+1}")
                 break
-            prompt = f"Summarize these messages from the '{channel.name}' channel into a detailed narrative:\n\n{chunk}"
+            prompt = f"Extract key alpha from these {channel.name} messages. Focus on:\n• Market sentiment signals\n• Price/volume anomalies\n• Breaking news impact\n• Whale movements\n• Technical patterns\n• Regulatory updates\n\nFormat as bullet points. Be concise, no fluff:\n\n{chunk}"
             try:
-                response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
+                response = await aclient.chat.completions.create(model='gpt-4.1-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
                 chunk_summaries.append(response.choices[0].message.content.strip())
                 increment_api_call_counter()
                 logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
@@ -772,9 +776,9 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
             return
 
-        final_prompt = f"Provide a comprehensive, cohesive summary of these detailed summaries from the last 48 hours:\n\n{' '.join(chunk_summaries)}"
+        final_prompt = f"Synthesize these channel summaries into pure alpha. Structure as:\n\n**Market Sentiment:** [Bullish/Bearish/Neutral + %]\n**Key Events:** [Bullet points]\n**Price Action:** [Notable movements]\n**Technical:** [Important levels/patterns]\n**Regulatory:** [Updates if any]\n**Whale Activity:** [Large moves if any]\n\nBe direct, actionable, no narrative fluff:\n\n{' '.join(chunk_summaries)}"
         try:
-            response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": final_prompt}], max_tokens=2000)
+            response = await aclient.chat.completions.create(model='gpt-4.1-mini', messages=[{"role": "user", "content": final_prompt}], max_tokens=2000)
             final_summary = response.choices[0].message.content.strip()
             increment_api_call_counter()
             
@@ -921,12 +925,12 @@ async def cache_stats(ctx: Context) -> None:
         await ctx.send("You do not have permission to use this command.")
         return
     hit_rate = calculate_cache_hit_rate()
-    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4o-mini Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
+    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4.1-mini Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
     await ctx.send(embed=embed)
 
 def calculate_cache_hit_rate() -> float:
-    total_cached = usage_data['openai_gpt4o_mini']['cached_input_tokens']
-    total_input = usage_data['openai_gpt4o_mini']['input_tokens'] + total_cached
+    total_cached = usage_data['openai_gpt41_mini']['cached_input_tokens']
+    total_input = usage_data['openai_gpt41_mini']['input_tokens'] + total_cached
     return (total_cached / total_input * 100) if total_input > 0 else 0.0
 
 if __name__ == "__main__":
