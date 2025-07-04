@@ -96,6 +96,44 @@ class RateLimiter:
 
 api_rate_limiter = RateLimiter(config.API_RATE_LIMIT_MAX, config.API_RATE_LIMIT_INTERVAL)
 
+# Enhanced rate limiting with per-user tracking
+user_rate_limits: Dict[int, List[float]] = {}
+MAX_REQUESTS_PER_MINUTE = 15  # Per user limit
+MAX_REQUESTS_PER_HOUR = 100   # Per user limit
+
+def check_user_rate_limit(user_id: int) -> Optional[str]:
+    """Check if user is rate limited, return error message if limited"""
+    current_time = time.time()
+    
+    if user_id not in user_rate_limits:
+        user_rate_limits[user_id] = []
+    
+    # Clean old timestamps (keep last hour)
+    user_rate_limits[user_id] = [
+        timestamp for timestamp in user_rate_limits[user_id] 
+        if current_time - timestamp <= 3600
+    ]
+    
+    # Check minute limit
+    minute_requests = [
+        timestamp for timestamp in user_rate_limits[user_id]
+        if current_time - timestamp <= 60
+    ]
+    
+    if len(minute_requests) >= MAX_REQUESTS_PER_MINUTE:
+        wait_time = 60 - int(current_time - min(minute_requests))
+        return f"⏱️ Rate limit: Maximum {MAX_REQUESTS_PER_MINUTE} requests per minute. Please wait {wait_time} seconds."
+    
+    # Check hour limit  
+    if len(user_rate_limits[user_id]) >= MAX_REQUESTS_PER_HOUR:
+        oldest_request = min(user_rate_limits[user_id])
+        wait_time = int(3600 - (current_time - oldest_request))
+        return f"⏱️ Rate limit: Maximum {MAX_REQUESTS_PER_HOUR} requests per hour. Please wait {wait_time//60}m {wait_time%60}s."
+    
+    # Add current request
+    user_rate_limits[user_id].append(current_time)
+    return None
+
 def get_user_context(user_id: int) -> Deque[Dict[str, Any]]:
     return user_contexts.setdefault(user_id, deque(maxlen=config.MAX_CONTEXT_MESSAGES))
 
