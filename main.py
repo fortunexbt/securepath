@@ -497,6 +497,23 @@ async def process_message(message: discord.Message, question: Optional[str] = No
         return
 
     logger.info(f"Processing message from {message.author} (ID: {message.author.id}): {question}")
+    
+    # Log user query to database for analytics
+    guild_id = message.guild.id if message.guild else None
+    channel_id = message.channel.id
+    username = f"{message.author.name}#{message.author.discriminator}" if message.author.discriminator != "0" else message.author.name
+    
+    if db_manager.pool:
+        await db_manager.log_user_query(
+            user_id=message.author.id,
+            username=username,
+            command=command or "dm_chat",
+            query_text=question,
+            channel_id=channel_id,
+            guild_id=guild_id,
+            response_generated=False,  # Will update this later
+            error_occurred=False
+        )
 
     if len(question) < 5:
         await message.channel.send("Please provide a more detailed question (at least 5 characters).")
@@ -640,6 +657,20 @@ async def send_initial_stats() -> None:
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
     logger.debug("Status updated to: [watching] image analysis...")
+
+    # Log the analyze command query
+    if db_manager.pool:
+        username = f"{ctx.author.name}#{ctx.author.discriminator}" if ctx.author.discriminator != "0" else ctx.author.name
+        query_text = f"Image analysis request" + (f" with prompt: {user_prompt}" if user_prompt else " (no additional prompt)")
+        await db_manager.log_user_query(
+            user_id=ctx.author.id,
+            username=username,
+            command="analyze",
+            query_text=query_text,
+            channel_id=ctx.channel.id,
+            guild_id=ctx.guild.id if ctx.guild else None,
+            response_generated=False
+        )
 
     chart_url = None
     if ctx.message.attachments:
@@ -791,6 +822,20 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
         await ctx.send("Please provide a question after the !ask command. Example: !ask What is yield farming?")
         await reset_status()
         return
+    
+    # Log the ask command query
+    if db_manager.pool:
+        username = f"{ctx.author.name}#{ctx.author.discriminator}" if ctx.author.discriminator != "0" else ctx.author.name
+        await db_manager.log_user_query(
+            user_id=ctx.author.id,
+            username=username,
+            command="ask",
+            query_text=question,
+            channel_id=ctx.channel.id,
+            guild_id=ctx.guild.id if ctx.guild else None,
+            response_generated=False
+        )
+    
     message_counter[ctx.author.id] += 1
     command_counter['ask'] += 1
     await process_message(ctx.message, question=question, command='ask')
@@ -811,6 +856,19 @@ async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
         logger.warning(f"Missing permissions to read messages in channel {channel.name}")
         await reset_status()
         return
+
+    # Log the summary command query
+    if db_manager.pool:
+        username = f"{ctx.author.name}#{ctx.author.discriminator}" if ctx.author.discriminator != "0" else ctx.author.name
+        await db_manager.log_user_query(
+            user_id=ctx.author.id,
+            username=username,
+            command="summary",
+            query_text=f"Summary request for #{channel.name}",
+            channel_id=ctx.channel.id,
+            guild_id=ctx.guild.id if ctx.guild else None,
+            response_generated=False
+        )
 
     command_counter['summary'] += 1
     await perform_channel_summary(ctx, channel, command='summary')
@@ -1210,6 +1268,58 @@ async def model_costs(ctx: Context) -> None:
             inline=True
         )
     
+    await ctx.send(embed=embed)
+
+@bot.command(name='queries')
+@commands.has_permissions(administrator=True)
+async def query_analytics(ctx: Context) -> None:
+    """Show user query analytics (admin only)"""
+    if ctx.author.id != config.OWNER_ID:
+        await ctx.send("You do not have permission to use this command.")
+        return
+    
+    if not db_manager.pool:
+        await ctx.send("Database not available. Query tracking is currently offline.")
+        return
+    
+    analytics = await db_manager.get_query_analytics()
+    if not analytics:
+        await ctx.send("Failed to retrieve query analytics.")
+        return
+    
+    embed = discord.Embed(
+        title="🔍 User Query Analytics",
+        description="What users are asking about (last 7 days)",
+        color=0x9B59B6,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Popular queries
+    if analytics['popular_queries']:
+        popular_text = ""
+        for query in analytics['popular_queries'][:8]:
+            query_preview = query['query_text'][:50] + "..." if len(query['query_text']) > 50 else query['query_text']
+            popular_text += f"**{query['command']}:** {query_preview} ({query['frequency']}x)\n"
+        embed.add_field(name="🔥 Popular Queries", value=popular_text, inline=False)
+    
+    # Command patterns
+    if analytics['command_patterns']:
+        patterns_text = "\n".join([
+            f"**{cmd['command']}:** {cmd['total_queries']} queries, {cmd['unique_users']} users"
+            for cmd in analytics['command_patterns'][:5]
+        ])
+        embed.add_field(name="📊 Command Usage", value=patterns_text, inline=True)
+    
+    # Most active hours
+    if analytics['hourly_activity']:
+        active_hours = analytics['hourly_activity'][:5]
+        hours_text = "\n".join([
+            f"**{int(hour['hour'])}:00:** {hour['query_count']} queries"
+            for hour in active_hours
+        ])
+        embed.add_field(name="⏰ Peak Hours", value=hours_text, inline=True)
+    
+    embed.set_footer(text="All user queries and commands are tracked for analytics")
     await ctx.send(embed=embed)
 
 @bot.command(name='commands')
