@@ -26,6 +26,7 @@ from io import BytesIO
 
 # Local imports
 import config
+from database import db_manager
 
 logger = logging.getLogger('SecurePathBot')
 console = Console()
@@ -213,6 +214,28 @@ def increment_token_cost(cost: float):
     total_token_cost += cost
     logger.info(f"Total token cost: ${total_token_cost:.6f}")
 
+async def log_usage_to_db(user: discord.User, command: str, model: str, 
+                         input_tokens: int = 0, output_tokens: int = 0, 
+                         cached_tokens: int = 0, cost: float = 0.0,
+                         guild_id: Optional[int] = None, channel_id: Optional[int] = None):
+    """Log usage to database if connected"""
+    if db_manager.pool:
+        try:
+            await db_manager.log_usage(
+                user_id=user.id,
+                username=f"{user.name}#{user.discriminator}" if user.discriminator != "0" else user.name,
+                command=command,
+                model=model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cached_tokens=cached_tokens,
+                cost=cost,
+                guild_id=guild_id,
+                channel_id=channel_id
+            )
+        except Exception as e:
+            logger.error(f"Failed to log usage to database: {e}")
+
 def can_make_api_call() -> bool:
     if api_call_counter >= config.DAILY_API_CALL_LIMIT:
         logger.debug(f"API call limit reached: {api_call_counter}/{config.DAILY_API_CALL_LIMIT}")
@@ -332,7 +355,9 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         logger.error(traceback.format_exc())
     return None
 
-async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]:
+async def fetch_openai_response(user_id: int, new_message: str, user: Optional[discord.User] = None, 
+                               command: str = "ask", guild_id: Optional[int] = None, 
+                               channel_id: Optional[int] = None) -> Optional[str]:
     if not can_make_api_call():
         logger.warning("Daily API call limit reached. Skipping API call.")
         return None
@@ -374,6 +399,20 @@ async def fetch_openai_response(user_id: int, new_message: str) -> Optional[str]
 
         usage_data['openai_gpt41_mini']['cost'] += cost
         increment_token_cost(cost)
+        
+        # Log to database if user provided
+        if user:
+            await log_usage_to_db(
+                user=user,
+                command=command,
+                model="gpt-4.1-mini",
+                input_tokens=prompt_tokens,
+                output_tokens=completion_tokens,
+                cached_tokens=cached_tokens,
+                cost=cost,
+                guild_id=guild_id,
+                channel_id=channel_id
+            )
 
         logger.info(f"OpenAI GPT-4.1-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
         logger.info(f"Estimated OpenAI GPT-4.1-mini API call cost: ${cost:.6f}")
@@ -478,10 +517,30 @@ async def process_message(message: discord.Message, question: Optional[str] = No
 
             update_user_context(message.author.id, question, role='user')
 
+            guild_id = message.guild.id if message.guild else None
+            channel_id = message.channel.id
+            
             if config.USE_PERPLEXITY_API:
                 answer = await fetch_perplexity_response(message.author.id, question)
+                # Log perplexity usage to DB
+                if answer and db_manager.pool:
+                    await log_usage_to_db(
+                        user=message.author,
+                        command=command or "dm_chat",
+                        model="perplexity-sonar-pro",
+                        cost=0.001,  # Rough estimate for perplexity
+                        guild_id=guild_id,
+                        channel_id=channel_id
+                    )
             else:
-                answer = await fetch_openai_response(message.author.id, question)
+                answer = await fetch_openai_response(
+                    message.author.id, 
+                    question, 
+                    user=message.author,
+                    command=command or "dm_chat",
+                    guild_id=guild_id,
+                    channel_id=channel_id
+                )
 
             if answer:
                 update_user_context(message.author.id, answer, role='assistant')
@@ -530,6 +589,14 @@ async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
     logger.info(f'Bot is active in {len(bot.guilds)} guild(s)')
     log_instance_info()
+    
+    # Initialize database connection
+    db_connected = await db_manager.connect()
+    if db_connected:
+        logger.info("Database connection established successfully")
+    else:
+        logger.error("Failed to connect to database - usage tracking will be limited")
+    
     await send_initial_stats()
     if not change_status.is_running():
         change_status.start()
@@ -612,7 +679,14 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
         await ctx.send("Detected a chart, analyzing it...")
         logger.info(f"Chart URL detected: {chart_url}")
 
-        image_analysis = await analyze_chart_image(chart_url, user_prompt)
+        guild_id = ctx.guild.id if ctx.guild else None
+        image_analysis = await analyze_chart_image(
+            chart_url, 
+            user_prompt, 
+            user=ctx.author,
+            guild_id=guild_id,
+            channel_id=ctx.channel.id
+        )
 
         if image_analysis:
             await send_long_embed(
@@ -639,7 +713,8 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
 
     await reset_status()
 
-async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional[str]:
+async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optional[discord.User] = None, 
+                             guild_id: Optional[int] = None, channel_id: Optional[int] = None) -> Optional[str]:
     try:
         async with session.get(chart_url) as resp:
             if resp.status != 200:
@@ -691,6 +766,19 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "") -> Optional
         usage_data['openai_gpt41_mini_vision']['tokens'] += estimated_tokens
         usage_data['openai_gpt41_mini_vision']['cost'] += cost
         increment_token_cost(cost)
+        
+        # Log to database if user provided
+        if user:
+            await log_usage_to_db(
+                user=user,
+                command="analyze",
+                model="gpt-4.1-mini-vision",
+                input_tokens=estimated_tokens,
+                output_tokens=500,  # Rough estimate
+                cost=cost,
+                guild_id=guild_id,
+                channel_id=channel_id
+            )
         
         logger.info(f"Estimated OpenAI GPT-4.1-mini Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
         return analysis
@@ -768,6 +856,25 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                 response = await aclient.chat.completions.create(model='gpt-4.1-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
                 chunk_summaries.append(response.choices[0].message.content.strip())
                 increment_api_call_counter()
+                
+                # Log chunk processing to database
+                if hasattr(response, 'usage') and response.usage:
+                    usage = response.usage
+                    input_tokens = getattr(usage, 'prompt_tokens', 500)  # Estimate if not available
+                    output_tokens = getattr(usage, 'completion_tokens', 300)
+                    cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
+                    
+                    await log_usage_to_db(
+                        user=ctx.author,
+                        command="summary_chunk",
+                        model="gpt-4.1-mini",
+                        input_tokens=input_tokens,
+                        output_tokens=output_tokens,
+                        cost=cost,
+                        guild_id=ctx.guild.id if ctx.guild else None,
+                        channel_id=ctx.channel.id
+                    )
+                
                 logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
             except Exception as e:
                 logger.error(f"Error summarizing chunk {i+1}: {e}")
@@ -781,6 +888,24 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             response = await aclient.chat.completions.create(model='gpt-4.1-mini', messages=[{"role": "user", "content": final_prompt}], max_tokens=2000)
             final_summary = response.choices[0].message.content.strip()
             increment_api_call_counter()
+            
+            # Log final summary to database
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                input_tokens = getattr(usage, 'prompt_tokens', 800)  # Estimate if not available
+                output_tokens = getattr(usage, 'completion_tokens', 600)
+                cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
+                
+                await log_usage_to_db(
+                    user=ctx.author,
+                    command="summary_final",
+                    model="gpt-4.1-mini",
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost=cost,
+                    guild_id=ctx.guild.id if ctx.guild else None,
+                    channel_id=ctx.channel.id
+                )
             
             await send_long_embed(ctx.channel, final_summary, color=0x1D82B6, title=f"📄 48-Hour Summary for #{channel.name}")
             logger.info(f"Successfully sent summary for channel {channel.name}")
@@ -815,6 +940,12 @@ async def force_shutdown() -> None:
     for task in asyncio.all_tasks(loop=loop):
         if task is not asyncio.current_task(): task.cancel()
     await asyncio.sleep(0.1)
+    
+    # Close database connection
+    if db_manager.pool:
+        await db_manager.disconnect()
+        logger.info("Database connection closed")
+    
     if session: await session.close()
     if conn: await conn.close()
     if bot: await bot.close()
@@ -932,6 +1063,229 @@ def calculate_cache_hit_rate() -> float:
     total_cached = usage_data['openai_gpt41_mini']['cached_input_tokens']
     total_input = usage_data['openai_gpt41_mini']['input_tokens'] + total_cached
     return (total_cached / total_input * 100) if total_input > 0 else 0.0
+
+@bot.command(name='my_stats')
+@commands.cooldown(1, 30, commands.BucketType.user)
+async def my_stats(ctx: Context) -> None:
+    """Show user's personal usage statistics"""
+    if not db_manager.pool:
+        await ctx.send("Database not available. Stats tracking is currently offline.")
+        return
+    
+    user_stats = await db_manager.get_user_stats(ctx.author.id)
+    if not user_stats:
+        await ctx.send("No usage data found for your account.")
+        return
+    
+    user_data = user_stats['user_data']
+    command_stats = user_stats['command_stats']
+    recent_activity = user_stats['recent_activity']
+    
+    embed = discord.Embed(
+        title=f"📊 Usage Stats for {ctx.author.name}",
+        color=0x1D82B6,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Overall stats
+    embed.add_field(
+        name="📈 Overall",
+        value=f"**Total Requests:** {user_data['total_requests']}\n"
+              f"**Total Tokens:** {user_data['total_tokens']:,}\n"
+              f"**Total Cost:** ${user_data['total_cost']:.4f}\n"
+              f"**Member Since:** {user_data['first_interaction'].strftime('%Y-%m-%d')}",
+        inline=True
+    )
+    
+    # Command breakdown
+    if command_stats:
+        top_commands = command_stats[:3]  # Top 3 commands
+        command_text = "\n".join([
+            f"**{cmd['command']}:** {cmd['count']} uses (${cmd['cost']:.4f})"
+            for cmd in top_commands
+        ])
+        embed.add_field(name="🎯 Top Commands", value=command_text, inline=True)
+    
+    # Recent activity
+    if recent_activity:
+        recent_text = "\n".join([
+            f"**{act['date']}:** {act['requests']} requests"
+            for act in recent_activity[:5]
+        ])
+        embed.add_field(name="📅 Recent Activity", value=recent_text, inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='global_stats')
+@commands.has_permissions(administrator=True)
+async def global_stats(ctx: Context) -> None:
+    """Show global bot usage statistics (admin only)"""
+    if ctx.author.id != config.OWNER_ID:
+        await ctx.send("You do not have permission to use this command.")
+        return
+    
+    if not db_manager.pool:
+        await ctx.send("Database not available. Stats tracking is currently offline.")
+        return
+    
+    stats = await db_manager.get_global_stats()
+    if not stats:
+        await ctx.send("Failed to retrieve global statistics.")
+        return
+    
+    overall = stats['overall']
+    top_users = stats['top_users']
+    top_commands = stats['top_commands']
+    
+    embed = discord.Embed(
+        title="🌍 Global Bot Statistics",
+        color=0x00ff00,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    # Overall stats
+    embed.add_field(
+        name="📊 Overall",
+        value=f"**Total Requests:** {overall['total_requests']:,}\n"
+              f"**Unique Users:** {overall['unique_users']:,}\n"
+              f"**Total Tokens:** {overall['total_tokens']:,}\n"
+              f"**Total Cost:** ${overall['total_cost']:.4f}\n"
+              f"**Avg Tokens/Request:** {overall['avg_tokens_per_request']:.1f}",
+        inline=True
+    )
+    
+    # Top users
+    if top_users:
+        top_users_text = "\n".join([
+            f"**{user['username'][:20]}:** {user['total_requests']} requests"
+            for user in top_users[:5]
+        ])
+        embed.add_field(name="👑 Top Users", value=top_users_text, inline=True)
+    
+    # Top commands
+    if top_commands:
+        top_commands_text = "\n".join([
+            f"**{cmd['command']}:** {cmd['usage_count']} uses"
+            for cmd in top_commands[:5]
+        ])
+        embed.add_field(name="🎯 Popular Commands", value=top_commands_text, inline=False)
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='model_costs')
+@commands.has_permissions(administrator=True)
+async def model_costs(ctx: Context) -> None:
+    """Show cost breakdown by AI model (admin only)"""
+    if ctx.author.id != config.OWNER_ID:
+        await ctx.send("You do not have permission to use this command.")
+        return
+    
+    if not db_manager.pool:
+        await ctx.send("Database not available. Stats tracking is currently offline.")
+        return
+    
+    costs = await db_manager.get_costs_by_model()
+    if not costs or not costs['model_costs']:
+        await ctx.send("No model cost data available.")
+        return
+    
+    embed = discord.Embed(
+        title="💰 Model Cost Breakdown",
+        color=0xFF6B35,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    for model in costs['model_costs']:
+        embed.add_field(
+            name=f"🤖 {model['model']}",
+            value=f"**Requests:** {model['requests']:,}\n"
+                  f"**Input Tokens:** {model['input_tokens']:,}\n"
+                  f"**Output Tokens:** {model['output_tokens']:,}\n"
+                  f"**Total Cost:** ${model['total_cost']:.4f}\n"
+                  f"**Avg Cost/Request:** ${model['avg_cost_per_request']:.4f}",
+            inline=True
+        )
+    
+    await ctx.send(embed=embed)
+
+@bot.command(name='help')
+async def help_command(ctx: Context) -> None:
+    """Show bot help and available commands"""
+    embed = discord.Embed(
+        title="🤖 SecurePath AI Bot - Commands",
+        description="Advanced crypto analysis powered by AI",
+        color=0x004200,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(
+        name="🔍 !ask [question]",
+        value="Get real-time market insights using Perplexity AI\n"
+              "Sources from GitHub, news, DeFi data, and more\n"
+              "Example: `!ask What's happening with Bitcoin?`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📊 !analyze [image]",
+        value="Advanced chart analysis using GPT-4.1-mini Vision\n"
+              "Attach an image or use recent chart in channel\n"
+              "Gets sentiment, key levels, patterns, and trade setups",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📄 !summary #channel",
+        value="Generate alpha-focused summary of channel activity\n"
+              "Extracts market sentiment, events, and key movements\n"
+              "Example: `!summary #crypto-news`",
+        inline=False
+    )
+    
+    embed.add_field(
+        name="📈 !my_stats",
+        value="View your personal usage statistics and costs\n"
+              "See your command usage and token consumption",
+        inline=True
+    )
+    
+    embed.add_field(
+        name="🎯 Features",
+        value="• Real-time data from elite sources\n"
+              "• Alpha-focused, no fluff responses\n"
+              "• Persistent usage tracking\n"
+              "• Context-aware conversations in DMs",
+        inline=True
+    )
+    
+    embed.set_footer(text="Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    await ctx.send(embed=embed)
+
+@bot.command(name='ping')
+async def ping(ctx: Context) -> None:
+    """Check bot latency and database status"""
+    start_time = time.time()
+    message = await ctx.send("🏓 Pinging...")
+    end_time = time.time()
+    
+    latency = round(bot.latency * 1000)
+    response_time = round((end_time - start_time) * 1000)
+    
+    # Check database status
+    db_status = "🟢 Connected" if db_manager.pool else "🔴 Disconnected"
+    
+    embed = discord.Embed(
+        title="🏓 Pong!",
+        color=0x00ff00,
+        timestamp=datetime.now(timezone.utc)
+    )
+    
+    embed.add_field(name="Discord Latency", value=f"{latency}ms", inline=True)
+    embed.add_field(name="Response Time", value=f"{response_time}ms", inline=True)
+    embed.add_field(name="Database", value=db_status, inline=True)
+    embed.add_field(name="API Calls Today", value=f"{api_call_counter}/{config.DAILY_API_CALL_LIMIT}", inline=True)
+    
+    await message.edit(content="", embed=embed)
 
 if __name__ == "__main__":
     lock_file_handle = ensure_single_instance()
