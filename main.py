@@ -251,10 +251,12 @@ def estimate_tokens(image_size_bytes: int) -> int:
 async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
     if session is None:
         logger.error("Session is not initialized")
-        return None
-    if not can_make_api_call():
-        logger.warning("Daily API call limit reached. Skipping API call.")
-        return None
+        raise Exception("🚫 Network session not available. Please try again.")
+    
+    can_call, error_msg = can_make_api_call(user_id)
+    if not can_call:
+        logger.warning(f"Rate limit reached for user {user_id}")
+        raise Exception(error_msg)
 
     headers = {
         "Authorization": f"Bearer {config.PERPLEXITY_API_KEY}",
@@ -419,6 +421,66 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
         logger.error(traceback.format_exc())
         return None
+
+async def send_structured_analysis_embed(
+    channel: discord.abc.Messageable,
+    text: str,
+    color: int,
+    title: str,
+    image_url: Optional[str] = None,
+    user_mention: Optional[str] = None
+) -> None:
+    """Send analysis with structured field-based formatting for better readability"""
+    try:
+        # Create structured embed with better formatting
+        embed = discord.Embed(
+            title=title,
+            description="AI-powered technical analysis with actionable insights",
+            color=color
+        )
+        
+        if image_url:
+            embed.set_image(url=image_url)
+        
+        # Parse analysis into sections for better organization
+        sections = text.split('\n\n')  # Split by double newlines
+        
+        for i, section in enumerate(sections[:6]):  # Limit to 6 fields to avoid clutter
+            if section.strip():
+                # Extract title if present (lines starting with **)
+                lines = section.strip().split('\n')
+                if lines[0].startswith('**') and lines[0].endswith('**'):
+                    field_title = lines[0].strip('*')
+                    field_content = '\n'.join(lines[1:]) if len(lines) > 1 else "Analysis in progress..."
+                else:
+                    field_title = f"Analysis Part {i+1}"
+                    field_content = section.strip()
+                
+                # Ensure content fits in field (1024 char limit)
+                if len(field_content) > 1000:
+                    field_content = field_content[:997] + "..."
+                
+                embed.add_field(
+                    name=f"📈 {field_title[:250]}",
+                    value=field_content or "No specific insights",
+                    inline=False
+                )
+        
+        # If no clear sections, add as single comprehensive field
+        if len(sections) <= 1:
+            content = text[:1000] + "..." if len(text) > 1000 else text
+            embed.add_field(name="📈 Technical Analysis", value=content, inline=False)
+        
+        embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
+        embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini Vision")
+        
+        content = user_mention if user_mention else None
+        await channel.send(content=content, embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Failed to send structured analysis embed: {e}")
+        # Fallback to regular embed
+        await send_long_embed(channel, text, color, title, image_url)
 
 async def send_long_embed(
     channel: discord.abc.Messageable,
@@ -797,42 +859,111 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
                         chart_url = attachment.url
                         logger.debug(f"Image found in recent channel messages: {chart_url}")
                         break
+            
+            # If no recent images, look further back
+            if not chart_url:
+                async for older_message in ctx.channel.history(limit=20):
+                    if older_message.attachments:
+                        attachment = older_message.attachments[0]
+                        if attachment.content_type and attachment.content_type.startswith('image/'):
+                            chart_url = attachment.url
+                            logger.debug(f"Image found in older channel messages: {chart_url}")
+                            break
     
     if chart_url:
-        await ctx.send("Detected a chart, analyzing it...")
+        # Enhanced self-editing progress for analyze command
+        progress_embed = discord.Embed(
+            title="📈 SecurePath Agent Analysis",
+            description=f"**Image:** [Chart Analysis]({chart_url})\n**Prompt:** {user_prompt or 'Standard technical analysis'}",
+            color=0x1D82B6
+        )
+        progress_embed.add_field(name="Status", value="🔄 Initializing image analysis...", inline=False)
+        progress_embed.set_thumbnail(url=chart_url)
+        progress_embed.set_footer(text="SecurePath Agent • Real-time Analysis")
+        
+        status_msg = await ctx.send(embed=progress_embed)
         logger.info(f"Chart URL detected: {chart_url}")
 
-        guild_id = ctx.guild.id if ctx.guild else None
-        image_analysis = await analyze_chart_image(
-            chart_url, 
-            user_prompt, 
-            user=ctx.author,
-            guild_id=guild_id,
-            channel_id=ctx.channel.id
-        )
-
-        if image_analysis:
-            await send_structured_analysis_embed(
-                ctx.channel,
-                text=image_analysis,
-                color=0x1D82B6,
-                title="📈 Chart Analysis",
-                image_url=chart_url,
-                user_mention=ctx.author.mention
-            )
-            logger.info(f"Sent image analysis to channel {ctx.channel.name}")
-            await log_interaction(
+        try:
+            # Update progress: Processing image
+            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with GPT-4.1-mini Vision...", inline=False)
+            await status_msg.edit(embed=progress_embed)
+            
+            guild_id = ctx.guild.id if ctx.guild else None
+            image_analysis = await analyze_chart_image(
+                chart_url, 
+                user_prompt, 
                 user=ctx.author,
-                channel=ctx.channel,
-                command='analyze',
-                user_input=user_prompt or 'No additional prompt provided',
-                bot_response=image_analysis[:1024]
+                guild_id=guild_id,
+                channel_id=ctx.channel.id
             )
-        else:
-            await ctx.send("Sorry, I couldn't analyze the image. Please try again.")
-            logger.warning("Image analysis failed to return a response.")
+
+            if image_analysis:
+                # Update progress: Finalizing
+                progress_embed.set_field_at(0, name="Status", value="✨ Finalizing technical analysis...", inline=False)
+                await status_msg.edit(embed=progress_embed)
+                
+                # Brief pause for UX
+                await asyncio.sleep(1)
+                
+                # Delete progress and send final result
+                await status_msg.delete()
+                
+                await send_structured_analysis_embed(
+                    ctx.channel,
+                    text=image_analysis,
+                    color=0x1D82B6,
+                    title="📈 Chart Analysis",
+                    image_url=chart_url,
+                    user_mention=ctx.author.mention
+                )
+                logger.info(f"Sent image analysis to channel {ctx.channel.name}")
+                await log_interaction(
+                    user=ctx.author,
+                    channel=ctx.channel,
+                    command='analyze',
+                    user_input=user_prompt or 'No additional prompt provided',
+                    bot_response=image_analysis[:1024]
+                )
+            else:
+                # Update with error state
+                error_embed = discord.Embed(
+                    title="❌ Analysis Failed",
+                    description="Sorry, I couldn't analyze the image. Please try again with a clearer chart image.",
+                    color=0xFF0000
+                )
+                error_embed.add_field(name="Suggestion", value="Make sure the image is a clear chart or technical analysis diagram.", inline=False)
+                await status_msg.edit(embed=error_embed)
+                logger.warning("Image analysis failed to return a response.")
+                
+        except Exception as e:
+            # Update with error information
+            error_embed = discord.Embed(
+                title="❌ Analysis Error",
+                description="An error occurred during image analysis.",
+                color=0xFF0000
+            )
+            error_embed.add_field(name="Error", value=str(e)[:1000], inline=False)
+            await status_msg.edit(embed=error_embed)
+            logger.error(f"Error in analyze command: {e}")
     else:
-        await ctx.send("No chart detected. Please attach an image to analyze.")
+        help_embed = discord.Embed(
+            title="🖼️ Analyze Command Help",
+            description="Upload or attach a chart/image for AI-powered technical analysis.",
+            color=0x1D82B6
+        )
+        help_embed.add_field(
+            name="Usage", 
+            value="1. Attach an image to your `!analyze` command\n2. Or use `!analyze` in a channel with recent images", 
+            inline=False
+        )
+        help_embed.add_field(
+            name="Optional Prompt", 
+            value="`!analyze Look for support and resistance levels`", 
+            inline=False
+        )
+        help_embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini Vision")
+        await ctx.send(embed=help_embed)
         logger.warning("No image URL detected for analysis.")
 
     await reset_status()
@@ -1056,34 +1187,38 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         time_limit = datetime.now(timezone.utc) - timedelta(hours=72)  # Extended to 72 hours for better content capture
         messages = []
         
-        # Enhanced message filtering with better content detection
+        # Enhanced message filtering - INCLUDE bot/webhook messages for crypto channels
         async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
             content = msg.content.strip()
-            # More flexible filtering for better content capture
+            # More inclusive filtering - bots often provide valuable crypto data
             if (content and 
                 len(content) > 5 and  # Lower minimum length
-                not msg.author.bot and  # Skip bot messages
-                not content.startswith(('!ping', '!help', '!commands')) and  # Skip specific bot commands only
+                not content.startswith(('!ping', '!help', '!commands', '!stats')) and  # Skip basic bot commands only
                 not content.startswith(('http://imgur.', 'http://prnt.sc'))):  # Skip image-only links
-                # Include URLs and discussions even if they start with special characters
-                messages.append(f"[{msg.author.display_name}]: {content}")
+                # Include ALL users including bots, webhooks, and automated feeds
+                author_name = msg.author.display_name if not msg.author.bot else f"🤖{msg.author.display_name}"
+                messages.append(f"[{author_name}]: {content}")
         
-        # If still no content, try with even more relaxed criteria
+        # If still no content, try with maximum inclusivity
         if not messages:
-            logger.warning(f"No messages found with strict filtering in {channel.name}, trying relaxed filtering")
+            logger.warning(f"No messages found with standard filtering in {channel.name}, trying maximum inclusivity")
             async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
                 content = msg.content.strip()
-                if content and len(content) > 3 and not msg.author.bot:
-                    messages.append(f"[{msg.author.display_name}]: {content}")
+                if content and len(content) > 3:  # Include everything with any content
+                    author_name = msg.author.display_name if not msg.author.bot else f"🤖{msg.author.display_name}"
+                    messages.append(f"[{author_name}]: {content}")
 
         logger.info(f"Found {len(messages)} quality messages to summarize in channel {channel.name}")
 
         if not messages:
-            # Try one more time with maximum relaxed criteria for debugging
+            # Try one more time with absolute maximum inclusivity for debugging
             debug_count = 0
+            bot_count = 0
             async for msg in channel.history(after=time_limit, limit=1000, oldest_first=True):
                 if msg.content.strip():
                     debug_count += 1
+                    if msg.author.bot:
+                        bot_count += 1
             
             error_embed = discord.Embed(
                 title="⚠️ No Content Found",
@@ -1092,12 +1227,12 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             )
             error_embed.add_field(
                 name="Debug Info", 
-                value=f"Total messages with any content: {debug_count}\nFiltered messages: 0", 
+                value=f"Total messages: {debug_count}\nBot messages: {bot_count}\nFiltered messages: 0", 
                 inline=False
             )
             error_embed.add_field(
                 name="Suggestion", 
-                value="Try a more active channel or check if the bot has proper permissions.", 
+                value="Channel may be inactive or bot lacks message history permissions.", 
                 inline=False
             )
             await status_msg.edit(embed=error_embed)
