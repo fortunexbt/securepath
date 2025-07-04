@@ -1697,8 +1697,8 @@ async def cache_stats(ctx: Context) -> None:
     await ctx.send(embed=embed)
 
 def calculate_cache_hit_rate() -> float:
-    total_cached = usage_data['openai_gpt41_mini']['cached_input_tokens']
-    total_input = usage_data['openai_gpt41_mini']['input_tokens'] + total_cached
+    total_cached = usage_data['openai_gpt41']['cached_input_tokens']
+    total_input = usage_data['openai_gpt41']['input_tokens'] + total_cached
     return (total_cached / total_input * 100) if total_input > 0 else 0.0
 
 @bot.command(name='stats')
