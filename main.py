@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import traceback
+import hashlib
 from collections import Counter, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional
@@ -56,6 +57,18 @@ message_counter = Counter()
 command_counter = Counter()
 api_call_counter = 0
 total_token_cost = 0.0  # Added for tracking total token cost
+
+# Aggressive caching for repeated queries (30 min TTL)
+query_cache: Dict[str, Dict[str, Any]] = {}
+CACHE_TTL = 1800  # 30 minutes
+
+# Performance tracking
+performance_metrics = {
+    'cache_hits': 0,
+    'cache_misses': 0,
+    'avg_response_time': 0.0,
+    'total_responses': 0
+}
 
 # Usage data tracking
 usage_data = {
@@ -196,8 +209,21 @@ def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') ->
     encoding = encoding_for_model(model)
     tokens = encoding.encode(prompt)
     if len(tokens) > max_tokens:
-        truncated = encoding.decode(tokens[-max_tokens:])
-        logger.debug(f"Truncated prompt from {len(tokens)} to {max_tokens} tokens.")
+        # Smart truncation: preserve structure and important content
+        lines = prompt.split('\n')
+        
+        # Keep first 20% and last 20% for context
+        keep_start = int(len(lines) * 0.2)
+        keep_end = int(len(lines) * 0.2)
+        
+        if keep_start + keep_end < len(lines):
+            truncated_lines = lines[:keep_start] + ['[... content truncated for optimization ...]'] + lines[-keep_end:]
+            truncated = '\n'.join(truncated_lines)
+        else:
+            # Fallback to token-based truncation
+            truncated = encoding.decode(tokens[-max_tokens:])
+        
+        logger.debug(f"Smart truncation: {len(tokens)} → {len(encoding.encode(truncated))} tokens")
         return truncated
     return prompt
 
@@ -242,6 +268,40 @@ def can_make_api_call(user_id: Optional[int] = None) -> tuple[bool, Optional[str
     """Check if API call can be made - no rate limiting for small server"""
     return True, None
 
+def get_query_hash(query: str) -> str:
+    """Generate consistent hash for query caching"""
+    return hashlib.md5(query.lower().strip().encode()).hexdigest()
+
+def get_cached_response(query: str) -> Optional[str]:
+    """Get cached response if available and not expired"""
+    query_hash = get_query_hash(query)
+    if query_hash in query_cache:
+        cache_entry = query_cache[query_hash]
+        if time.time() - cache_entry['timestamp'] < CACHE_TTL:
+            logger.info(f"Cache hit for query hash: {query_hash[:8]}")
+            performance_metrics['cache_hits'] += 1
+            return cache_entry['response']
+        else:
+            # Expired, remove from cache
+            del query_cache[query_hash]
+    
+    performance_metrics['cache_misses'] += 1
+    return None
+
+def cache_response(query: str, response: str) -> None:
+    """Cache response with timestamp"""
+    query_hash = get_query_hash(query)
+    query_cache[query_hash] = {
+        'response': response,
+        'timestamp': time.time()
+    }
+    logger.debug(f"Cached response for query hash: {query_hash[:8]}")
+    
+    # Cleanup old cache entries (keep cache size manageable)
+    if len(query_cache) > 100:
+        oldest_key = min(query_cache.keys(), key=lambda k: query_cache[k]['timestamp'])
+        del query_cache[oldest_key]
+
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
 
 def estimate_tokens(image_size_bytes: int) -> int:
@@ -251,6 +311,12 @@ def estimate_tokens(image_size_bytes: int) -> int:
     return estimated
 
 async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[str]:
+    # Check cache first for instant responses
+    cached_response = get_cached_response(new_message)
+    if cached_response:
+        logger.info(f"Returning cached response for user {user_id}")
+        return cached_response
+    
     if session is None:
         logger.error("Session is not initialized")
         raise Exception("🚫 Network session not available. Please try again.")
@@ -300,7 +366,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         "model": "sonar-pro",
         "messages": messages,
         "max_tokens": 1500,
-        "temperature": 0.2,  # Lower temperature for more factual responses
+        "temperature": 0.1,  # Minimal temperature for maximum speed and consistency
         "search_after_date_filter": ninety_days_ago,  # Use date filter OR recency filter, not both
         "search_domain_filter": domain_filter,
         "search_context_size": "high",  # Maximum citation coverage
@@ -368,6 +434,10 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
 
                 logger.info(f"Perplexity API usage: Prompt Tokens={prompt_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
                 logger.info(f"Estimated Perplexity API call cost: ${cost:.6f}")
+                
+                # Cache the response for future queries
+                cache_response(new_message, answer)
+                
                 return answer
             else:
                 response_text = await response.text()
@@ -1574,8 +1644,20 @@ async def start_bot() -> None:
             for sig in (signal.SIGTERM, signal.SIGINT):
                 asyncio.get_event_loop().add_signal_handler(sig, handle_exit)
 
-        conn = TCPConnector(limit=10)
-        session = ClientSession(connector=conn)
+        # Aggressive connection pooling for maximum performance
+        conn = TCPConnector(
+            limit=50,           # Increased connection pool
+            limit_per_host=20,  # More connections per host
+            ttl_dns_cache=300,  # DNS cache for 5 minutes
+            use_dns_cache=True,
+            keepalive_timeout=120,  # Keep connections alive longer
+            enable_cleanup_closed=True
+        )
+        session = ClientSession(
+            connector=conn,
+            timeout=ClientTimeout(total=30, connect=10),  # Optimized timeouts
+            headers={'User-Agent': 'SecurePath-Agent/2.0'}
+        )
 
         if not config.DISCORD_TOKEN:
             logger.error("DISCORD_TOKEN is not set. Cannot start the bot.")
@@ -1692,8 +1774,33 @@ async def cache_stats(ctx: Context) -> None:
     if ctx.author.id != config.OWNER_ID:
         await ctx.send("You do not have permission to use this command.")
         return
-    hit_rate = calculate_cache_hit_rate()
-    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4.1 Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
+    
+    # OpenAI cache stats
+    openai_hit_rate = calculate_cache_hit_rate()
+    
+    # Query cache stats
+    current_time = time.time()
+    valid_entries = sum(1 for entry in query_cache.values() if current_time - entry['timestamp'] < CACHE_TTL)
+    
+    embed = discord.Embed(title="📊 Performance Cache Stats", color=0x1D82B6)
+    embed.add_field(name="OpenAI Cache Hit Rate", value=f"**{openai_hit_rate:.2f}%**", inline=True)
+    embed.add_field(name="Query Cache Entries", value=f"**{valid_entries}** valid\n**{len(query_cache)}** total", inline=True)
+    embed.add_field(name="Cache TTL", value=f"**{CACHE_TTL//60}** minutes", inline=True)
+    
+    # Performance metrics
+    total_cache_requests = performance_metrics['cache_hits'] + performance_metrics['cache_misses']
+    cache_hit_rate = (performance_metrics['cache_hits'] / total_cache_requests * 100) if total_cache_requests > 0 else 0
+    
+    embed.add_field(name="Query Cache Hit Rate", value=f"**{cache_hit_rate:.1f}%**\n({performance_metrics['cache_hits']}/{total_cache_requests})", inline=True)
+    
+    if performance_metrics['total_responses'] > 0:
+        embed.add_field(name="Avg Response Time", value=f"**{performance_metrics['avg_response_time']:.2f}s**", inline=True)
+    
+    if query_cache:
+        oldest_timestamp = min(entry['timestamp'] for entry in query_cache.values())
+        oldest_age = int((current_time - oldest_timestamp) / 60)
+        embed.add_field(name="Oldest Entry", value=f"**{oldest_age}** minutes ago", inline=True)
+    
     await ctx.send(embed=embed)
 
 def calculate_cache_hit_rate() -> float:
