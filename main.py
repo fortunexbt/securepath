@@ -1253,7 +1253,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
     # Send enhanced status message with progress tracking
     status_embed = discord.Embed(
         title="🔍 Analyzing Channel Activity",
-        description=f"Processing messages from {channel.mention} (last 48 hours)...",
+        description=f"Processing messages from {channel.mention} (last 72 hours)...",
         color=0x1D82B6
     )
     status_embed.add_field(name="Status", value="🔄 Fetching messages...", inline=False)
@@ -1420,7 +1420,7 @@ MESSAGES:
                 description=f"Unable to process messages from {channel.mention}. Please try again later.",
                 color=0xFF0000
             )
-            error_embed.add_field(name="Tip", value="Make sure the channel has substantial discussion in the last 48 hours.", inline=False)
+            error_embed.add_field(name="Tip", value="Make sure the channel has substantial discussion in the last 72 hours.", inline=False)
             await status_msg.edit(embed=error_embed)
             return
 
@@ -1434,7 +1434,7 @@ MESSAGES:
 
 DATE: {current_date}
 CHANNEL: #{channel.name}
-TIMEFRAME: Last 48 hours
+TIMEFRAME: Last 72 hours
 
 STRUCTURE YOUR RESPONSE:
 
