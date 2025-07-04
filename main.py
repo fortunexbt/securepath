@@ -266,7 +266,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     }
 
     current_date = datetime.now().strftime("%Y-%m-%d")
-    dynamic_system_prompt = f"Today is {current_date}. All information must be accurate up to this date. {config.SYSTEM_PROMPT}"
+    dynamic_system_prompt = f"Today is {current_date}. All information must be accurate up to this date. {config.SYSTEM_PROMPT} CRITICAL: No tables, no comparisons in table format. Use bullet points only. Keep responses under 600 words. Be concise and direct."
 
     context_messages = get_context_messages(user_id)
 
@@ -299,7 +299,7 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
     data = {
         "model": "sonar-pro",
         "messages": messages,
-        "max_tokens": 1500,
+        "max_tokens": 800,  # Reduced for concise responses
         "temperature": 0.7,  # Natural conversational temperature
         "search_after_date_filter": ninety_days_ago,  # Use date filter OR recency filter, not both
         "search_domain_filter": domain_filter,
@@ -329,6 +329,9 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                 citations = resp_json.get('choices', [{}])[0].get('extras', {}).get('citations', [])
                 search_results = resp_json.get('search_results', [])
                 
+                # Debug: Log what we're getting from Perplexity
+                logger.debug(f"Citations found: {len(citations)}, Search results: {len(search_results)}")
+                
                 # Combine both citation sources for comprehensive referencing
                 all_sources = []
                 
@@ -346,15 +349,19 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
                     if url and title and (title, url) not in all_sources:
                         all_sources.append((title, url))
                 
+                logger.debug(f"Total sources processed: {len(all_sources)}")
+                
                 if all_sources:
-                    formatted_citations = "\n\n**📚 Sources & Citations:**\n"
-                    for i, (title, url) in enumerate(all_sources[:8], 1):  # Limit to 8 sources
+                    formatted_citations = "\n\n**📚 Sources:**\n"
+                    for i, (title, url) in enumerate(all_sources[:6], 1):  # Reduced to 6 for brevity
                         # Truncate long titles for better formatting
-                        display_title = title[:80] + "..." if len(title) > 80 else title
-                        formatted_citations += f"{i}. [{display_title}]({url})\n"
+                        display_title = title[:60] + "..." if len(title) > 60 else title
+                        formatted_citations += f"[{i}] [{display_title}]({url})\n"
                     
-                    formatted_citations += "\n*DYOR: Always verify information from original sources*"
+                    formatted_citations += "\n*verify claims with original sources*"
                     answer += formatted_citations
+                else:
+                    logger.warning("No citations found in Perplexity response")
 
                 usage = resp_json.get('usage', {})
                 prompt_tokens = usage.get('prompt_tokens', 0)
@@ -534,7 +541,7 @@ async def send_structured_analysis_embed(
             embed.add_field(name="📈 Technical Analysis", value=content, inline=False)
         
         embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
-        embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 Vision")
+        embed.set_footer(text="SecurePath Agent • Powered by Perplexity Sonar-Pro")
         
         content = user_mention if user_mention else None
         await channel.send(content=content, embed=embed)
@@ -569,9 +576,9 @@ async def send_long_embed(
         embed.set_author(name="SecurePath Agent", icon_url=bot.user.avatar.url if bot.user.avatar else None)
         
         if len(parts) > 1:
-            embed.set_footer(text=f"SecurePath Agent • Part {i + 1}/{len(parts)} • Powered by GPT-4.1")
+            embed.set_footer(text=f"SecurePath Agent • Part {i + 1}/{len(parts)} • Powered by Perplexity Sonar-Pro")
         else:
-            embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1")
+            embed.set_footer(text="SecurePath Agent • Powered by Perplexity Sonar-Pro")
 
         try:
             # Add user mention to first part if provided
