@@ -301,9 +301,8 @@ async def fetch_perplexity_response(user_id: int, new_message: str) -> Optional[
         "messages": messages,
         "max_tokens": 1500,
         "temperature": 0.2,  # Lower temperature for more factual responses
-        "search_after_date_filter": ninety_days_ago,
+        "search_after_date_filter": ninety_days_ago,  # Use date filter OR recency filter, not both
         "search_domain_filter": domain_filter,
-        "search_recency_filter": "month",  # Focus on recent content
         "search_context_size": "high",  # Maximum citation coverage
         "return_citations": True,  # Ensure citations are returned
         "return_images": False  # Disable images for faster response
