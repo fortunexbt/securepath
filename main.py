@@ -1208,8 +1208,8 @@ async def model_costs(ctx: Context) -> None:
     
     await ctx.send(embed=embed)
 
-@bot.command(name='help')
-async def help_command(ctx: Context) -> None:
+@bot.command(name='commands')
+async def commands_help(ctx: Context) -> None:
     """Show bot help and available commands"""
     embed = discord.Embed(
         title="🤖 SecurePath AI Bot - Commands",
