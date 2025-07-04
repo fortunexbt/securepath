@@ -634,66 +634,32 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
             logger.info(f"Perplexity response generated for user {user_id}")
             update_user_context(user_id, question or message.content, 'user')
             
-            # Update progress: Analyzing
-            progress_embed.set_field_at(0, name="Status", value="🧑‍💻 Analyzing with GPT-4.1...", inline=False)
+            # Update progress: Finalizing (skip GPT-4.1 redundancy for speed)
+            progress_embed.set_field_at(0, name="Status", value="✨ Finalizing response...", inline=False)
             await status_msg.edit(embed=progress_embed)
             
+            # Use Perplexity response directly - it's already analyzed and optimized
+            update_user_context(user_id, perplexity_response, 'assistant')
+            
+            # Delete progress message and send final response (with error handling)
             try:
-                openai_response = await fetch_openai_response(
-                    user_id, 
-                    f"Analyze this information and provide insights in a casual, conversational tone:\n\n{perplexity_response}", 
-                    user=message.author,
-                    command=command,
-                    guild_id=message.guild.id if message.guild else None,
-                    channel_id=message.channel.id
-                )
-                
-                # Update progress: Finalizing
-                progress_embed.set_field_at(0, name="Status", value="✨ Finalizing response...", inline=False)
-                await status_msg.edit(embed=progress_embed)
-                
-                update_user_context(user_id, openai_response, 'assistant')
-                
-                # Delete progress message and send final response (with error handling)
-                try:
-                    await status_msg.delete()
-                except discord.NotFound:
-                    # Status message was already deleted
-                    pass
-                
-                await send_long_embed(
-                    message.channel, 
-                    openai_response, 
-                    user_mention=message.author.mention,
-                    title="🔍 Research Results"
-                )
-                
-                await log_interaction(user=message.author, channel=message.channel, command=command, user_input=question or message.content, bot_response=openai_response[:1024])
-                logger.info(f"Successfully sent response to user {user_id}")
-                
-            except Exception as openai_error:
-                # If OpenAI fails, send Perplexity response directly
-                logger.warning(f"OpenAI failed, sending Perplexity response directly: {openai_error}")
-                
-                # Update to show fallback mode (with error handling)
-                try:
-                    progress_embed.set_field_at(0, name="Status", value="🔄 Using fallback mode...", inline=False)
-                    await status_msg.edit(embed=progress_embed)
-                    await asyncio.sleep(1)  # Brief pause for UX
-                    await status_msg.delete()
-                except discord.NotFound:
-                    # Status message was already deleted or not found
-                    pass
-                
-                await send_long_embed(
-                    message.channel, 
-                    perplexity_response, 
-                    user_mention=message.author.mention, 
-                    title="🔍 Research Results (Direct)"
-                )
+                await status_msg.delete()
+            except discord.NotFound:
+                # Status message was already deleted
+                pass
+            
+            await send_long_embed(
+                message.channel, 
+                perplexity_response, 
+                user_mention=message.author.mention,
+                title="🔍 Research Results"
+            )
+            
+            await log_interaction(user=message.author, channel=message.channel, command=command, user_input=question or message.content, bot_response=perplexity_response[:1024])
+            logger.info(f"Successfully sent Perplexity response to user {user_id}")
                 
         except Exception as perplexity_error:
-            # Both services failed
+            # Perplexity failed
             raise perplexity_error
 
     except Exception as e:
