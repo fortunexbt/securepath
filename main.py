@@ -736,46 +736,60 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
     logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
     await ctx.send(f"Generating summary for {channel.mention}... This may take a moment.")
     
-    time_limit = datetime.now(timezone.utc) - timedelta(hours=48)
-    messages = [msg.content for msg in await channel.history(after=time_limit, limit=None, oldest_first=True).flatten() if msg.content.strip()]
-
-    if not messages:
-        await ctx.send(f"No messages to summarize in channel {channel.mention}.")
-        return
-
-    full_text = "\n".join(messages)
-    chunk_size, chunk_summaries = 8000, []
-    chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
-
-    for i, chunk in enumerate(chunks):
-        if not can_make_api_call(): break
-        prompt = f"Summarize these messages from the '{channel.name}' channel into a detailed narrative:\n\n{chunk}"
-        try:
-            response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
-            chunk_summaries.append(response.choices[0].message.content.strip())
-            increment_api_call_counter()
-            # Token cost tracking can be added here
-        except Exception as e:
-            logger.error(f"Error summarizing chunk {i+1}: {e}")
-
-    if not chunk_summaries:
-        await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
-        return
-
-    final_prompt = f"Provide a comprehensive, cohesive summary of these detailed summaries from the last 48 hours:\n\n{' '.join(chunk_summaries)}"
     try:
-        response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": final_prompt}], max_tokens=2000)
-        final_summary = response.choices[0].message.content.strip()
-        increment_api_call_counter()
-        
-        embed = Embed(title=f"📄 48-Hour Summary for #{channel.name}", description=final_summary, color=0x1D82B6, timestamp=datetime.now(timezone.utc))
-        embed.set_author(name=bot.user.name, icon_url=bot.user.avatar.url)
-        await send_long_embed(ctx.channel, final_summary, color=0x1D82B6, title=f"📄 48-Hour Summary for #{channel.name}")
+        time_limit = datetime.now(timezone.utc) - timedelta(hours=48)
+        messages = []
+        async for msg in channel.history(after=time_limit, limit=None, oldest_first=True):
+            if msg.content.strip():
+                messages.append(msg.content)
 
-        await log_interaction(user=ctx.author, channel=ctx.channel, command=command, user_input=f"Summary for #{channel.name}", bot_response=final_summary[:1024])
+        logger.info(f"Found {len(messages)} messages to summarize in channel {channel.name}")
+
+        if not messages:
+            await ctx.send(f"No messages to summarize in channel {channel.mention}.")
+            return
+
+        full_text = "\n".join(messages)
+        chunk_size, chunk_summaries = 8000, []
+        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
+
+        logger.info(f"Processing {len(chunks)} chunks for summary")
+
+        for i, chunk in enumerate(chunks):
+            if not can_make_api_call(): 
+                logger.warning(f"API call limit reached at chunk {i+1}")
+                break
+            prompt = f"Summarize these messages from the '{channel.name}' channel into a detailed narrative:\n\n{chunk}"
+            try:
+                response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": prompt}], max_tokens=1500)
+                chunk_summaries.append(response.choices[0].message.content.strip())
+                increment_api_call_counter()
+                logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
+            except Exception as e:
+                logger.error(f"Error summarizing chunk {i+1}: {e}")
+
+        if not chunk_summaries:
+            await ctx.send(f"Could not generate a summary for channel {channel.mention}.")
+            return
+
+        final_prompt = f"Provide a comprehensive, cohesive summary of these detailed summaries from the last 48 hours:\n\n{' '.join(chunk_summaries)}"
+        try:
+            response = await aclient.chat.completions.create(model='gpt-4o-mini', messages=[{"role": "user", "content": final_prompt}], max_tokens=2000)
+            final_summary = response.choices[0].message.content.strip()
+            increment_api_call_counter()
+            
+            await send_long_embed(ctx.channel, final_summary, color=0x1D82B6, title=f"📄 48-Hour Summary for #{channel.name}")
+            logger.info(f"Successfully sent summary for channel {channel.name}")
+
+            await log_interaction(user=ctx.author, channel=ctx.channel, command=command, user_input=f"Summary for #{channel.name}", bot_response=final_summary[:1024])
+        except Exception as e:
+            logger.error(f"Error generating final summary: {e}")
+            logger.error(traceback.format_exc())
+            await ctx.send(f"An error occurred while generating the summary for channel {channel.mention}.")
     except Exception as e:
-        logger.error(f"Error generating final summary: {e}")
-        await ctx.send(f"An error occurred while generating the summary for channel {channel.mention}.")
+        logger.error(f"Error in perform_channel_summary: {e}")
+        logger.error(traceback.format_exc())
+        await ctx.send(f"An error occurred while processing the summary for channel {channel.mention}.")
 
 def ensure_single_instance():
     lock_file = '/tmp/securepath_bot.lock'
