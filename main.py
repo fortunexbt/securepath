@@ -1882,53 +1882,59 @@ async def unified_stats(ctx: Context) -> None:
 async def commands_help(ctx: Context) -> None:
     """Show SecurePath Agent help and available commands"""
     embed = discord.Embed(
-        title="🤖 SecurePath Agent - Commands",
-        description="Advanced crypto analysis powered by AI",
-        color=0x1D82B6,
+        title="⚡ SecurePath Agent",
+        description="*mario's crypto agent • show me the docs, show me the code*",
+        color=0x00D4AA,  # SecurePath green
         timestamp=datetime.now(timezone.utc)
     )
     
+    # Main Commands Section
     embed.add_field(
-        name="🔍 !ask [question]",
-        value="Get real-time market insights using Perplexity AI\n"
-              "Sources from GitHub, news, DeFi data, and more\n"
-              "Example: `!ask What's happening with Bitcoin?`",
+        name="",
+        value="**🔍 `!ask [question]`**\n"
+              "▸ real-time market insights via perplexity sonar-pro\n"
+              "▸ sources: github, defi data, news, official docs\n"
+              "▸ *example:* `!ask solana vs ethereum fees`\n\n"
+              
+              "**📊 `!analyze [image]`**\n"
+              "▸ advanced chart analysis with gpt-4.1 vision\n"
+              "▸ sentiment, key levels, patterns, trade setups\n"
+              "▸ *attach image or use recent chart in channel*\n\n"
+              
+              "**📄 `!summary #channel`**\n"
+              "▸ alpha-focused channel activity digest\n"
+              "▸ extracts sentiment, events, key movements\n"
+              "▸ *example:* `!summary #crypto-news`",
         inline=False
     )
     
+    # Utilities & Info
     embed.add_field(
-        name="📊 !analyze [image]",
-        value="Advanced chart analysis using GPT-4.1 Vision\n"
-              "Attach an image or use recent chart in channel\n"
-              "Gets sentiment, key levels, patterns, and trade setups",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📄 !summary #channel",
-        value="Generate alpha-focused summary of channel activity\n"
-              "Extracts market sentiment, events, and key movements\n"
-              "Example: `!summary #crypto-news`",
-        inline=False
-    )
-    
-    embed.add_field(
-        name="📈 !stats",
-        value="View server-wide usage statistics\n"
-              "See popular commands and active users",
+        name="",
+        value="**📈 `!stats`** • usage analytics\n"
+              "**🏓 `!ping`** • latency check\n"
+              "**⚙️ `!cache_stats`** • performance metrics",
         inline=True
     )
     
+    # Key Features
     embed.add_field(
-        name="🎯 Features",
-        value="• Real-time data from elite sources\n"
-              "• Alpha-focused, no fluff responses\n"
-              "• Persistent usage tracking\n"
-              "• Context-aware conversations in DMs",
+        name="",
+        value="**✨ features**\n"
+              "▸ elite source filtering\n"
+              "▸ context-aware conversations\n"
+              "▸ real-time progress tracking\n"
+              "▸ no-fluff alpha extraction",
         inline=True
     )
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
+    # Bottom spacing
+    embed.add_field(name="", value="", inline=False)
+    
+    embed.set_footer(
+        text="SecurePath Agent • Powered by Perplexity Sonar-Pro & GPT-4.1 Vision"
+    )
+    
     await ctx.send(embed=embed)
 
 @bot.command(name='ping')
