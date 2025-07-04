@@ -1055,15 +1055,15 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
 
         # Analysis based on the full image now, as gpt-4o handles it better
         base_prompt = (
-            "Analyze this chart like a top-tier quant. Extract pure alpha:\n\n"
-            "**Sentiment:** [Bullish/Bearish/Neutral + confidence %]\n"
-            "**Key Levels:** [Support/Resistance with exact prices]\n"
-            "**Pattern:** [What you see + timeframe]\n"
-            "**Volume:** [Unusual activity + implications]\n"
-            "**Risk/Reward:** [Entry/Exit/Stop levels]\n"
-            "**Timeframe:** [Best trade horizon]\n"
-            "**Catalysts:** [What could move price]\n\n"
-            "No narratives. Just actionable data. Don't use #### formatting."
+            "you're a schizo defi agent. analyze this chart like you're on 5 cups of coffee and need to extract alpha:\n\n"
+            "**sentiment:** [bullish/bearish/neutral + confidence %]\n"
+            "**key levels:** [support/resistance with exact prices]\n"
+            "**pattern:** [what you see + timeframe]\n"
+            "**volume:** [unusual activity + implications]\n"
+            "**risk/reward:** [entry/exit/stop levels]\n"
+            "**timeframe:** [best trade horizon]\n"
+            "**catalysts:** [what could move price]\n\n"
+            "no tables, no narratives, no #### formatting. just raw alpha in bullet points. speak like crypto twitter. show me the charts and i'll show you the news."
         )
         full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
@@ -1340,22 +1340,24 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
         # Enhanced concurrent processing with better error handling
         async def process_chunk(i, chunk):
             # Enhanced prompt for higher quality output
-            prompt = f"""Analyze these {channel.name} messages and extract actionable intelligence:
+            prompt = f"""you're a schizo defi agent analyzing {channel.name} for alpha. extract actionable intelligence like your bags depend on it:
             
-**FOCUS AREAS:**
-• Market sentiment & crowd psychology
-• Price movements & volume patterns  
-• Breaking news & catalyst events
-• Whale activity & large transactions
-• Technical analysis & key levels
-• Regulatory developments
-• Project updates & partnerships
+**focus areas:**
+• market sentiment & crowd psychology
+• price movements & volume patterns  
+• breaking news & catalyst events
+• whale activity & large transactions
+• technical analysis & key levels
+• regulatory developments
+• project updates & partnerships
 
-OUTPUT FORMAT:
-- Use clear bullet points
-- Include specific numbers/percentages when mentioned
-- Flag high-impact information with 🚨
-- Keep insights concise and actionable
+**output format:**
+- bullet points only, no tables
+- include specific numbers/percentages when mentioned
+- flag high-impact info with 🚨
+- keep insights concise and actionable
+- speak like crypto twitter, lowercase preferred
+- show me the docs, show me the code mentality
 
 MESSAGES:
 {chunk}"""
@@ -1436,16 +1438,18 @@ DATE: {current_date}
 CHANNEL: #{channel.name}
 TIMEFRAME: Last 72 hours
 
-STRUCTURE YOUR RESPONSE:
+**structure your response:**
 
-**📈 MARKET SENTIMENT**
-[Overall sentiment: Bullish/Bearish/Neutral with confidence %]
+**📈 market sentiment**
+[overall sentiment: bullish/bearish/neutral with confidence %]
 
-**🚨 KEY EVENTS**
-• [Most significant developments]
+**🚨 key events**
+• [most significant developments]
 
-**💰 PRICE ACTION** 
-• [Notable price movements and levels]
+**💰 price action** 
+• [notable price movements and levels]
+
+**no tables, no verbose explanations. pure alpha extraction. speak like crypto twitter - casual, lowercase, confident. show me the data, not the narrative."""
 
 **🔍 TECHNICAL ANALYSIS**
 • [Key levels, patterns, indicators mentioned]
