@@ -1303,8 +1303,12 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
 
         logger.info(f"Processing {len(chunks)} chunks for summary (enhanced processing)")
         
-        # Enhanced concurrent processing with better error handling
+        # Enhanced concurrent processing with real-time progress updates
+        completed_chunks = 0
+        start_time = time.time()
+        
         async def process_chunk(i, chunk):
+            nonlocal completed_chunks
             # Enhanced prompt for higher quality output
             prompt = f"""analyze {channel.name} messages and extract actionable intelligence with technical precision:
             
@@ -1356,6 +1360,38 @@ MESSAGES:
                         process_chunk.total_output_tokens += output_tokens
                     
                     logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
+                    
+                    # Update progress in real-time with visual progress bar
+                    completed_chunks += 1
+                    try:
+                        progress_embed = status_msg.embeds[0]
+                        
+                        # Create visual progress bar
+                        progress_percentage = (completed_chunks / len(chunks)) * 100
+                        filled_blocks = int(progress_percentage / 10)
+                        empty_blocks = 10 - filled_blocks
+                        progress_bar = "█" * filled_blocks + "░" * empty_blocks
+                        
+                        # Calculate ETA
+                        elapsed_time = time.time() - start_time
+                        if completed_chunks > 0:
+                            avg_time_per_chunk = elapsed_time / completed_chunks
+                            remaining_chunks = len(chunks) - completed_chunks
+                            eta_seconds = int(avg_time_per_chunk * remaining_chunks)
+                            eta_text = f" • ETA: {eta_seconds}s" if eta_seconds > 0 else " • Almost done!"
+                        else:
+                            eta_text = ""
+                        
+                        progress_embed.set_field_at(0, 
+                            name="Status", 
+                            value=f"⚙️ Processing chunks: {completed_chunks}/{len(chunks)}\n{progress_bar} {progress_percentage:.0f}%{eta_text}", 
+                            inline=False
+                        )
+                        await status_msg.edit(embed=progress_embed)
+                    except (discord.NotFound, IndexError):
+                        # Status message was deleted or embed is malformed
+                        pass
+                    
                     return result
                     
                 except Exception as e:
