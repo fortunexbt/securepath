@@ -465,7 +465,7 @@ async def log_interaction(user: discord.User, channel: discord.abc.Messageable, 
 
     embed = Embed(
         title="📝 User Interaction",
-        color=0xFF9900,
+        color=0x1D82B6,
         timestamp=datetime.now(timezone.utc)
     )
     embed.set_author(name=f"{user}", icon_url=user.avatar.url if user.avatar else None)
@@ -483,7 +483,11 @@ async def log_interaction(user: discord.User, channel: discord.abc.Messageable, 
         logger.error(f"Failed to send interaction log embed: {str(e)}")
 
 async def process_message(message: discord.Message, question: Optional[str] = None, command: Optional[str] = None) -> None:
-    # Removed rate limiting for maximum performance with small user base
+    # Enhanced rate limiting with per-user tracking
+    can_call, error_msg = can_make_api_call(message.author.id)
+    if not can_call:
+        await message.channel.send(f"{message.author.mention} {error_msg}")
+        return
 
     if question is None:
         question = message.content.strip()
@@ -1429,7 +1433,7 @@ async def commands_help(ctx: Context) -> None:
     embed = discord.Embed(
         title="🤖 SecurePath Agent - Commands",
         description="Advanced crypto analysis powered by AI",
-        color=0x004200,
+        color=0x1D82B6,
         timestamp=datetime.now(timezone.utc)
     )
     
@@ -1490,8 +1494,9 @@ async def ping(ctx: Context) -> None:
     db_status = "🟢 Connected" if db_manager.pool else "🔴 Disconnected"
     
     embed = discord.Embed(
-        title="🏓 Pong!",
-        color=0x00ff00,
+        title="🏓 Agent Status Check",
+        description="All systems operational",
+        color=0x1D82B6,
         timestamp=datetime.now(timezone.utc)
     )
     
