@@ -28,7 +28,7 @@ from io import BytesIO
 import config
 from database import db_manager
 
-logger = logging.getLogger('SecurePathBot')
+logger = logging.getLogger('SecurePathAgent')
 console = Console()
 
 def setup_logging() -> logging.Logger:
@@ -599,7 +599,7 @@ async def reset_status():
 @bot.event
 async def on_ready() -> None:
     logger.info(f'{bot.user} has connected to Discord!')
-    logger.info(f'Bot is active in {len(bot.guilds)} guild(s)')
+    logger.info(f'SecurePath Agent is active in {len(bot.guilds)} guild(s)')
     log_instance_info()
     
     # Initialize database connection
@@ -649,9 +649,18 @@ async def preload_user_messages(user_id: int, channel: discord.DMChannel) -> Non
         user_contexts[user_id] = deque(reversed(messages), maxlen=config.MAX_CONTEXT_MESSAGES)
         logger.info(f"Preloaded {len(user_contexts[user_id])} messages for user {user_id} in DMs.")
 
+startup_stats_sent = False
+
 async def send_initial_stats() -> None:
-    await asyncio.sleep(5)
+    global startup_stats_sent
+    if startup_stats_sent:
+        logger.debug("Startup stats already sent, skipping")
+        return
+    
+    await asyncio.sleep(5)  # Wait for bot to fully initialize
     await send_stats()
+    startup_stats_sent = True
+    logger.info("Initial startup stats completed")
 
 @bot.command(name='analyze')
 async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
@@ -910,23 +919,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
                 result = response.choices[0].message.content.strip()
                 increment_api_call_counter()
                 
-                # Log chunk processing to database
-                if hasattr(response, 'usage') and response.usage:
-                    usage = response.usage
-                    input_tokens = getattr(usage, 'prompt_tokens', 500)
-                    output_tokens = getattr(usage, 'completion_tokens', 300)
-                    cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
-                    
-                    await log_usage_to_db(
-                        user=ctx.author,
-                        command="summary_chunk",
-                        model="gpt-4.1-mini",
-                        input_tokens=input_tokens,
-                        output_tokens=output_tokens,
-                        cost=cost,
-                        guild_id=ctx.guild.id if ctx.guild else None,
-                        channel_id=ctx.channel.id
-                    )
+                # Note: Background chunk processing - not logged as separate user command
                 
                 logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
                 return result
@@ -951,23 +944,7 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
             final_summary = response.choices[0].message.content.strip()
             increment_api_call_counter()
             
-            # Log final summary to database
-            if hasattr(response, 'usage') and response.usage:
-                usage = response.usage
-                input_tokens = getattr(usage, 'prompt_tokens', 800)  # Estimate if not available
-                output_tokens = getattr(usage, 'completion_tokens', 600)
-                cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
-                
-                await log_usage_to_db(
-                    user=ctx.author,
-                    command="summary_final",
-                    model="gpt-4.1-mini",
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    cost=cost,
-                    guild_id=ctx.guild.id if ctx.guild else None,
-                    channel_id=ctx.channel.id
-                )
+            # Note: Background final processing - not logged as separate user command
             
             await send_long_embed(ctx.channel, final_summary, color=0x1D82B6, title=f"📄 48-Hour Summary for #{channel.name}")
             logger.info(f"Successfully sent summary for channel {channel.name}")
@@ -1060,29 +1037,64 @@ async def start_bot() -> None:
 
 async def send_stats() -> None:
     channel = bot.get_channel(config.LOG_CHANNEL_ID)
-    if not channel: return
+    if not channel: 
+        logger.warning("Admin channel not found for startup stats")
+        return
 
-    embed = discord.Embed(title="Bot Statistics", color=0x00ff00)
-    embed.add_field(name="Total Messages", value=sum(message_counter.values()), inline=True)
-    embed.add_field(name="Unique Users", value=len(message_counter), inline=True)
-    embed.add_field(name="Commands Used", value=sum(command_counter.values()), inline=True)
-    embed.add_field(name="API Calls", value=api_call_counter, inline=True)
-    embed.add_field(name="Est. Cost", value=f"${total_token_cost:.6f}", inline=True)
+    embed = discord.Embed(
+        title="🚀 SecurePath Agent - System Status", 
+        description="Agent successfully initialized and ready for operations",
+        color=0x1D82B6,
+        timestamp=datetime.now(timezone.utc)
+    )
     
-    top_users = []
-    for user_id, count in message_counter.most_common(5):
+    # Database connectivity status
+    db_status = "🟢 Connected" if db_manager.pool else "🔴 Disconnected"
+    embed.add_field(name="Database", value=db_status, inline=True)
+    embed.add_field(name="Active Guilds", value=len(bot.guilds), inline=True)
+    embed.add_field(name="Latency", value=f"{bot.latency*1000:.1f}ms", inline=True)
+    
+    # Get database stats if available
+    if db_manager.pool:
         try:
-            user = await bot.fetch_user(user_id)
-            top_users.append(f"{user.name}: {count}")
-        except discord.NotFound:
-            top_users.append(f"Unknown ({user_id}): {count}")
-
-    embed.add_field(name="Top 5 Users", value="\n".join(top_users) or "No data", inline=False)
-    embed.timestamp = datetime.now(timezone.utc)
+            stats = await db_manager.get_global_stats()
+            if stats and stats['overall']:
+                overall = stats['overall']
+                embed.add_field(
+                    name="📊 Total Usage",
+                    value=f"**Requests:** {overall['total_requests']:,}\n"
+                          f"**Users:** {overall['unique_users']:,}\n"
+                          f"**Cost:** ${overall['total_cost']:.4f}",
+                    inline=True
+                )
+                
+                # Top command if available
+                if stats['top_commands']:
+                    # Filter out background commands
+                    top_cmd = next(
+                        (cmd for cmd in stats['top_commands'] 
+                         if cmd['command'] not in ['summary_chunk', 'summary_final']), 
+                        None
+                    )
+                    if top_cmd:
+                        embed.add_field(
+                            name="🎯 Most Popular", 
+                            value=f"**{top_cmd['command']}** ({top_cmd['usage_count']} uses)", 
+                            inline=True
+                        )
+        except Exception as e:
+            logger.error(f"Failed to get database stats for startup: {e}")
+            embed.add_field(name="📊 Usage Stats", value="Initializing...", inline=True)
+    else:
+        embed.add_field(name="📊 Usage Stats", value="Database offline", inline=True)
+    
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    
     try:
         await channel.send(embed=embed)
+        logger.info("Startup stats sent to admin channel")
     except discord.HTTPException as e:
-        logger.error(f"Failed to send stats embed: {e}")
+        logger.error(f"Failed to send startup stats embed: {e}")
 
 @tasks.loop(hours=12)
 async def send_periodic_stats() -> None:
@@ -1127,61 +1139,9 @@ def calculate_cache_hit_rate() -> float:
     return (total_cached / total_input * 100) if total_input > 0 else 0.0
 
 @bot.command(name='stats')
-async def server_stats(ctx: Context) -> None:
-    """Show server-wide bot usage statistics"""
-    if not db_manager.pool:
-        await ctx.send("Database not available. Stats tracking is currently offline.")
-        return
-    
-    stats = await db_manager.get_global_stats()
-    if not stats:
-        await ctx.send("Failed to retrieve server statistics.")
-        return
-    
-    overall = stats['overall']
-    top_users = stats['top_users']
-    top_commands = stats['top_commands']
-    
-    embed = discord.Embed(
-        title="📊 Server Bot Statistics",
-        description="Usage analytics for this server",
-        color=0x00ff00,
-        timestamp=datetime.now(timezone.utc)
-    )
-    
-    # Overall stats (without costs)
-    embed.add_field(
-        name="📈 Overall Usage",
-        value=f"**Total Requests:** {overall['total_requests']:,}\n"
-              f"**Active Users:** {overall['unique_users']:,}\n"
-              f"**Total Tokens:** {overall['total_tokens']:,}\n"
-              f"**Avg Tokens/Request:** {overall['avg_tokens_per_request']:.1f}",
-        inline=True
-    )
-    
-    # Top users (without costs)
-    if top_users:
-        top_users_text = "\n".join([
-            f"**{user['username'][:20]}:** {user['total_requests']} requests"
-            for user in top_users[:8]
-        ])
-        embed.add_field(name="👑 Most Active Users", value=top_users_text, inline=True)
-    
-    # Top commands
-    if top_commands:
-        top_commands_text = "\n".join([
-            f"**{cmd['command']}:** {cmd['usage_count']} uses"
-            for cmd in top_commands[:6]
-        ])
-        embed.add_field(name="🎯 Popular Commands", value=top_commands_text, inline=False)
-    
-    embed.set_footer(text="Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
-    await ctx.send(embed=embed)
-
-@bot.command(name='global_stats')
 @commands.has_permissions(administrator=True)
-async def global_stats(ctx: Context) -> None:
-    """Show global bot usage statistics (admin only)"""
+async def unified_stats(ctx: Context) -> None:
+    """Show comprehensive SecurePath Agent analytics (admin only)"""
     if ctx.author.id != config.OWNER_ID:
         await ctx.send("You do not have permission to use this command.")
         return
@@ -1190,143 +1150,101 @@ async def global_stats(ctx: Context) -> None:
         await ctx.send("Database not available. Stats tracking is currently offline.")
         return
     
-    stats = await db_manager.get_global_stats()
-    if not stats:
-        await ctx.send("Failed to retrieve global statistics.")
+    # Get all data in parallel
+    stats_data = await db_manager.get_global_stats()
+    costs_data = await db_manager.get_costs_by_model()
+    query_data = await db_manager.get_query_analytics()
+    
+    if not stats_data:
+        await ctx.send("Failed to retrieve statistics.")
         return
     
-    overall = stats['overall']
-    top_users = stats['top_users']
-    top_commands = stats['top_commands']
+    overall = stats_data['overall']
+    top_users = stats_data['top_users']
+    top_commands = stats_data['top_commands']
     
     embed = discord.Embed(
-        title="🌍 Global Bot Statistics",
-        color=0x00ff00,
+        title="📊 SecurePath Agent Analytics",
+        description="Comprehensive usage analytics and performance metrics",
+        color=0x1D82B6,
         timestamp=datetime.now(timezone.utc)
     )
     
-    # Overall stats
+    # Overall Usage Statistics
     embed.add_field(
-        name="📊 Overall",
+        name="📈 Overall Performance",
         value=f"**Total Requests:** {overall['total_requests']:,}\n"
-              f"**Unique Users:** {overall['unique_users']:,}\n"
+              f"**Active Users:** {overall['unique_users']:,}\n"
               f"**Total Tokens:** {overall['total_tokens']:,}\n"
               f"**Total Cost:** ${overall['total_cost']:.4f}\n"
               f"**Avg Tokens/Request:** {overall['avg_tokens_per_request']:.1f}",
         inline=True
     )
     
-    # Top users
+    # Model Cost Breakdown
+    if costs_data and costs_data['model_costs']:
+        cost_text = ""
+        for model in costs_data['model_costs'][:3]:
+            cost_text += f"**{model['model']}:** {model['requests']:,} req, ${model['total_cost']:.4f}\n"
+        embed.add_field(name="💰 Model Costs", value=cost_text or "No data", inline=True)
+    
+    # Top Active Users
     if top_users:
-        top_users_text = "\n".join([
-            f"**{user['username'][:20]}:** {user['total_requests']} requests"
-            for user in top_users[:5]
+        users_text = "\n".join([
+            f"**{user['username'][:15]}:** {user['total_requests']} req, ${user['total_cost']:.3f}"
+            for user in top_users[:6]
         ])
-        embed.add_field(name="👑 Top Users", value=top_users_text, inline=True)
+        embed.add_field(name="👑 Top Users", value=users_text, inline=True)
     
-    # Top commands
+    # Popular Commands (filter out background commands)
     if top_commands:
-        top_commands_text = "\n".join([
-            f"**{cmd['command']}:** {cmd['usage_count']} uses"
-            for cmd in top_commands[:5]
+        filtered_commands = [
+            cmd for cmd in top_commands 
+            if cmd['command'] not in ['summary_chunk', 'summary_final']
+        ]
+        commands_text = "\n".join([
+            f"**{cmd['command']}:** {cmd['usage_count']} uses, ${cmd['total_cost']:.3f}"
+            for cmd in filtered_commands[:6]
         ])
-        embed.add_field(name="🎯 Popular Commands", value=top_commands_text, inline=False)
+        embed.add_field(name="🎯 Popular Commands", value=commands_text, inline=False)
     
-    await ctx.send(embed=embed)
-
-@bot.command(name='model_costs')
-@commands.has_permissions(administrator=True)
-async def model_costs(ctx: Context) -> None:
-    """Show cost breakdown by AI model (admin only)"""
-    if ctx.author.id != config.OWNER_ID:
-        await ctx.send("You do not have permission to use this command.")
-        return
-    
-    if not db_manager.pool:
-        await ctx.send("Database not available. Stats tracking is currently offline.")
-        return
-    
-    costs = await db_manager.get_costs_by_model()
-    if not costs or not costs['model_costs']:
-        await ctx.send("No model cost data available.")
-        return
-    
-    embed = discord.Embed(
-        title="💰 Model Cost Breakdown",
-        color=0xFF6B35,
-        timestamp=datetime.now(timezone.utc)
-    )
-    
-    for model in costs['model_costs']:
-        embed.add_field(
-            name=f"🤖 {model['model']}",
-            value=f"**Requests:** {model['requests']:,}\n"
-                  f"**Input Tokens:** {model['input_tokens']:,}\n"
-                  f"**Output Tokens:** {model['output_tokens']:,}\n"
-                  f"**Total Cost:** ${model['total_cost']:.4f}\n"
-                  f"**Avg Cost/Request:** ${model['avg_cost_per_request']:.4f}",
-            inline=True
-        )
-    
-    await ctx.send(embed=embed)
-
-@bot.command(name='queries')
-@commands.has_permissions(administrator=True)
-async def query_analytics(ctx: Context) -> None:
-    """Show user query analytics (admin only)"""
-    if ctx.author.id != config.OWNER_ID:
-        await ctx.send("You do not have permission to use this command.")
-        return
-    
-    if not db_manager.pool:
-        await ctx.send("Database not available. Query tracking is currently offline.")
-        return
-    
-    analytics = await db_manager.get_query_analytics()
-    if not analytics:
-        await ctx.send("Failed to retrieve query analytics.")
-        return
-    
-    embed = discord.Embed(
-        title="🔍 User Query Analytics",
-        description="What users are asking about (last 7 days)",
-        color=0x9B59B6,
-        timestamp=datetime.now(timezone.utc)
-    )
-    
-    # Popular queries
-    if analytics['popular_queries']:
-        popular_text = ""
-        for query in analytics['popular_queries'][:8]:
-            query_preview = query['query_text'][:50] + "..." if len(query['query_text']) > 50 else query['query_text']
-            popular_text += f"**{query['command']}:** {query_preview} ({query['frequency']}x)\n"
-        embed.add_field(name="🔥 Popular Queries", value=popular_text, inline=False)
-    
-    # Command patterns
-    if analytics['command_patterns']:
-        patterns_text = "\n".join([
+    # Query Analytics
+    if query_data and query_data['command_patterns']:
+        query_text = "\n".join([
             f"**{cmd['command']}:** {cmd['total_queries']} queries, {cmd['unique_users']} users"
-            for cmd in analytics['command_patterns'][:5]
+            for cmd in query_data['command_patterns'][:4]
         ])
-        embed.add_field(name="📊 Command Usage", value=patterns_text, inline=True)
+        embed.add_field(name="🔍 Query Patterns", value=query_text, inline=True)
     
-    # Most active hours
-    if analytics['hourly_activity']:
-        active_hours = analytics['hourly_activity'][:5]
+    # Peak Usage Hours
+    if query_data and query_data['hourly_activity']:
         hours_text = "\n".join([
             f"**{int(hour['hour'])}:00:** {hour['query_count']} queries"
-            for hour in active_hours
+            for hour in query_data['hourly_activity'][:4]
         ])
         embed.add_field(name="⏰ Peak Hours", value=hours_text, inline=True)
     
-    embed.set_footer(text="All user queries and commands are tracked for analytics")
+    # System Performance
+    hit_rate = calculate_cache_hit_rate()
+    embed.add_field(
+        name="⚡ System Performance",
+        value=f"**Cache Hit Rate:** {hit_rate:.1f}%\n"
+              f"**API Calls:** {api_call_counter:,}\n"
+              f"**Active Guilds:** {len(bot.guilds)}",
+        inline=True
+    )
+    
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
+
+
+
 
 @bot.command(name='commands')
 async def commands_help(ctx: Context) -> None:
-    """Show bot help and available commands"""
+    """Show SecurePath Agent help and available commands"""
     embed = discord.Embed(
-        title="🤖 SecurePath AI Bot - Commands",
+        title="🤖 SecurePath Agent - Commands",
         description="Advanced crypto analysis powered by AI",
         color=0x004200,
         timestamp=datetime.now(timezone.utc)
@@ -1372,12 +1290,12 @@ async def commands_help(ctx: Context) -> None:
         inline=True
     )
     
-    embed.set_footer(text="Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
 
 @bot.command(name='ping')
 async def ping(ctx: Context) -> None:
-    """Check bot latency and database status"""
+    """Check SecurePath Agent latency and database status"""
     start_time = time.time()
     message = await ctx.send("🏓 Pinging...")
     end_time = time.time()
@@ -1397,7 +1315,8 @@ async def ping(ctx: Context) -> None:
     embed.add_field(name="Discord Latency", value=f"{latency}ms", inline=True)
     embed.add_field(name="Response Time", value=f"{response_time}ms", inline=True)
     embed.add_field(name="Database", value=db_status, inline=True)
-    embed.add_field(name="API Calls Today", value=f"{api_call_counter}/{config.DAILY_API_CALL_LIMIT}", inline=True)
+    embed.add_field(name="API Calls Today", value=f"{api_call_counter}", inline=True)
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1-mini & Perplexity Sonar-Pro")
     
     await message.edit(content="", embed=embed)
 
