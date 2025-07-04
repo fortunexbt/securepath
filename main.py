@@ -1449,19 +1449,19 @@ TIMEFRAME: Last 72 hours
 **💰 price action** 
 • [notable price movements and levels]
 
-**no tables, no verbose explanations. pure alpha extraction. speak like crypto twitter - casual, lowercase, confident. show me the data, not the narrative."""
+**🔍 technical analysis**
+• [key levels, patterns, indicators mentioned]
 
-**🔍 TECHNICAL ANALYSIS**
-• [Key levels, patterns, indicators mentioned]
+**🏦 regulatory/news**
+• [regulatory updates, partnerships, announcements]
 
-**🏦 REGULATORY/NEWS**
-• [Regulatory updates, partnerships, announcements]
+**🐋 whale activity**
+• [large transactions, institutional moves]
 
-**🐋 WHALE ACTIVITY**
-• [Large transactions, institutional moves]
+**⚡ actionable insights**
+• [trading opportunities and risk factors]
 
-**⚡ ACTIONABLE INSIGHTS**
-• [Trading opportunities and risk factors]
+**no tables, no verbose explanations. pure alpha extraction. speak like crypto twitter - casual, lowercase, confident. show me the data, not the narrative.**
 
 CHUNK SUMMARIES:
 {chr(10).join(chunk_summaries)}"""
