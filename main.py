@@ -482,6 +482,91 @@ async def log_interaction(user: discord.User, channel: discord.abc.Messageable, 
     except discord.errors.HTTPException as e:
         logger.error(f"Failed to send interaction log embed: {str(e)}")
 
+async def process_message_with_streaming(message: discord.Message, status_msg: discord.Message, *, question: Optional[str] = None, command: str = 'ask') -> None:
+    """Enhanced message processing with streaming-like progress updates"""
+    try:
+        user_id = message.author.id
+        is_dm = isinstance(message.channel, discord.DMChannel)
+        logger.debug(f"Processing message from user {user_id} in {'DM' if is_dm else f'channel {message.channel.id}'}")
+
+        # Rate limiting check
+        can_call, error_msg = can_make_api_call(user_id)
+        if not can_call:
+            raise Exception(error_msg)
+        
+        # Update progress: Searching
+        progress_embed = status_msg.embeds[0]
+        progress_embed.set_field_at(0, name="Status", value="🔍 Searching Perplexity Sonar-Pro...", inline=False)
+        await status_msg.edit(embed=progress_embed)
+
+        if is_dm:
+            await preload_user_messages(user_id, message.channel)
+
+        try:
+            perplexity_response = await fetch_perplexity_response(user_id, question or message.content)
+            logger.info(f"Perplexity response generated for user {user_id}")
+            update_user_context(user_id, question or message.content, 'user')
+            
+            # Update progress: Analyzing
+            progress_embed.set_field_at(0, name="Status", value="🧑‍💻 Analyzing with GPT-4.1-mini...", inline=False)
+            await status_msg.edit(embed=progress_embed)
+            
+            try:
+                openai_response = await fetch_openai_response(
+                    user_id, 
+                    f"Analyze this information and provide insights in a casual, conversational tone:\n\n{perplexity_response}", 
+                    user=message.author,
+                    command=command,
+                    guild_id=message.guild.id if message.guild else None,
+                    channel_id=message.channel.id
+                )
+                
+                # Update progress: Finalizing
+                progress_embed.set_field_at(0, name="Status", value="✨ Finalizing response...", inline=False)
+                await status_msg.edit(embed=progress_embed)
+                
+                update_user_context(user_id, openai_response, 'assistant')
+                
+                # Delete progress message and send final response
+                await status_msg.delete()
+                
+                await send_long_embed(
+                    message.channel, 
+                    openai_response, 
+                    user_mention=message.author.mention,
+                    title="🔍 Research Results"
+                )
+                
+                await log_interaction(user=message.author, channel=message.channel, command=command, user_input=question or message.content, bot_response=openai_response[:1024])
+                logger.info(f"Successfully sent response to user {user_id}")
+                
+            except Exception as openai_error:
+                # If OpenAI fails, send Perplexity response directly
+                logger.warning(f"OpenAI failed, sending Perplexity response directly: {openai_error}")
+                
+                # Update to show fallback mode
+                progress_embed.set_field_at(0, name="Status", value="🔄 Using fallback mode...", inline=False)
+                await status_msg.edit(embed=progress_embed)
+                
+                await asyncio.sleep(1)  # Brief pause for UX
+                await status_msg.delete()
+                
+                await send_long_embed(
+                    message.channel, 
+                    perplexity_response, 
+                    user_mention=message.author.mention, 
+                    title="🔍 Research Results (Direct)"
+                )
+                
+        except Exception as perplexity_error:
+            # Both services failed
+            raise perplexity_error
+
+    except Exception as e:
+        logger.error(f"Error processing message: {e}")
+        logger.error(traceback.format_exc())
+        raise e
+
 async def process_message(message: discord.Message, question: Optional[str] = None, command: Optional[str] = None) -> None:
     # Enhanced rate limiting with per-user tracking
     can_call, error_msg = can_make_api_call(message.author.id)
@@ -828,11 +913,40 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
 
 @bot.command(name='ask')
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
-    await bot.change_presence(activity=Activity(type=ActivityType.watching, name="a question..."))
-    logger.debug("Status updated to: [watching] a question...")
+    await bot.change_presence(activity=Activity(type=ActivityType.playing, name="researching..."))
+    logger.debug("Status updated to: [playing] researching...")
 
     if not question:
-        await ctx.send("Please provide a question after the !ask command. Example: !ask What is yield farming?")
+        help_embed = discord.Embed(
+            title="🤔 Ask Command Help",
+            description="Get real-time crypto market insights with AI-powered research.",
+            color=0x1D82B6
+        )
+        help_embed.add_field(
+            name="Usage", 
+            value="`!ask [your question]`", 
+            inline=False
+        )
+        help_embed.add_field(
+            name="Examples", 
+            value="• `!ask What's the latest news on Bitcoin?`\n"
+                  "• `!ask Ethereum price prediction trends`\n"
+                  "• `!ask What's happening with DeFi protocols?`", 
+            inline=False
+        )
+        help_embed.set_footer(text="SecurePath Agent • Powered by Perplexity Sonar-Pro")
+        await ctx.send(embed=help_embed)
+        await reset_status()
+        return
+
+    # Enhanced input validation
+    if len(question) < 5:
+        await ctx.send("⚠️ Please provide a more detailed question (at least 5 characters).")
+        await reset_status()
+        return
+    
+    if len(question) > 500:
+        await ctx.send("⚠️ Question is too long. Please keep it under 500 characters.")
         await reset_status()
         return
     
@@ -851,8 +965,46 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
     
     message_counter[ctx.author.id] += 1
     command_counter['ask'] += 1
-    await process_message(ctx.message, question=question, command='ask')
-    await reset_status()
+    
+    # Enhanced ask with streaming-like progress updates
+    try:
+        # Send initial "thinking" message that we'll edit for progress
+        progress_embed = discord.Embed(
+            title="🔍 SecurePath Agent Research",
+            description=f"**Query:** {question[:100]}{'...' if len(question) > 100 else ''}",
+            color=0x1D82B6
+        )
+        progress_embed.add_field(name="Status", value="🔄 Initializing research...", inline=False)
+        progress_embed.set_footer(text="SecurePath Agent • Real-time Intelligence")
+        
+        status_msg = await ctx.send(embed=progress_embed)
+        
+        await process_message_with_streaming(ctx.message, status_msg, question=question, command='ask')
+        
+    except Exception as e:
+        # Enhanced error handling with user-friendly messages
+        error_msg = str(e) if any(emoji in str(e) for emoji in ['🚫', '⏱️', '🔑', '🌐', '⚠️', '🤷']) else "🚫 An unexpected error occurred while processing your request."
+        
+        error_embed = discord.Embed(
+            title="❌ Research Failed",
+            description=error_msg,
+            color=0xFF0000
+        )
+        error_embed.add_field(name="Suggestion", value="Try rephrasing your question or wait a moment before trying again.", inline=False)
+        error_embed.set_footer(text="If this persists, please contact support")
+        
+        # Try to edit the status message if it exists
+        try:
+            if 'status_msg' in locals():
+                await status_msg.edit(embed=error_embed)
+            else:
+                await ctx.send(embed=error_embed)
+        except:
+            await ctx.send(f"{ctx.author.mention} {error_msg}")
+            
+        logger.error(f"Error in ask command for user {ctx.author.id}: {e}")
+    finally:
+        await reset_status()
 
 @bot.command(name='summary')
 async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
@@ -900,26 +1052,52 @@ async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, co
     status_msg = await ctx.send(embed=status_embed)
     
     try:
-        time_limit = datetime.now(timezone.utc) - timedelta(hours=48)
+        time_limit = datetime.now(timezone.utc) - timedelta(hours=72)  # Extended to 72 hours for better content capture
         messages = []
         
-        # Improved message filtering for quality
-        async for msg in channel.history(after=time_limit, limit=2000, oldest_first=True):
+        # Enhanced message filtering with better content detection
+        async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
             content = msg.content.strip()
-            # Filter out low-quality messages
+            # More flexible filtering for better content capture
             if (content and 
-                len(content) > 10 and  # Minimum length
-                not content.startswith(('!', '.', '/')) and  # Skip commands
-                not msg.author.bot):  # Skip bot messages
+                len(content) > 5 and  # Lower minimum length
+                not msg.author.bot and  # Skip bot messages
+                not content.startswith(('!ping', '!help', '!commands')) and  # Skip specific bot commands only
+                not content.startswith(('http://imgur.', 'http://prnt.sc'))):  # Skip image-only links
+                # Include URLs and discussions even if they start with special characters
                 messages.append(f"[{msg.author.display_name}]: {content}")
+        
+        # If still no content, try with even more relaxed criteria
+        if not messages:
+            logger.warning(f"No messages found with strict filtering in {channel.name}, trying relaxed filtering")
+            async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
+                content = msg.content.strip()
+                if content and len(content) > 3 and not msg.author.bot:
+                    messages.append(f"[{msg.author.display_name}]: {content}")
 
         logger.info(f"Found {len(messages)} quality messages to summarize in channel {channel.name}")
 
         if not messages:
+            # Try one more time with maximum relaxed criteria for debugging
+            debug_count = 0
+            async for msg in channel.history(after=time_limit, limit=1000, oldest_first=True):
+                if msg.content.strip():
+                    debug_count += 1
+            
             error_embed = discord.Embed(
                 title="⚠️ No Content Found",
-                description=f"No substantial messages found in {channel.mention} from the last 48 hours.",
+                description=f"No substantial messages found in {channel.mention} from the last 72 hours.",
                 color=0xFF6B35
+            )
+            error_embed.add_field(
+                name="Debug Info", 
+                value=f"Total messages with any content: {debug_count}\nFiltered messages: 0", 
+                inline=False
+            )
+            error_embed.add_field(
+                name="Suggestion", 
+                value="Try a more active channel or check if the bot has proper permissions.", 
+                inline=False
             )
             await status_msg.edit(embed=error_embed)
             return
