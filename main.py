@@ -236,9 +236,13 @@ async def log_usage_to_db(user: discord.User, command: str, model: str,
         except Exception as e:
             logger.error(f"Failed to log usage to database: {e}")
 
-def can_make_api_call() -> bool:
-    # Removed API call limits for maximum performance with small user base
-    return True
+def can_make_api_call(user_id: Optional[int] = None) -> tuple[bool, Optional[str]]:
+    """Check if API call can be made, return (can_make, error_message)"""
+    if user_id:
+        rate_limit_msg = check_user_rate_limit(user_id)
+        if rate_limit_msg:
+            return False, rate_limit_msg
+    return True, None
 
 MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB limit
 
