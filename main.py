@@ -1222,36 +1222,53 @@ async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
         await reset_status()
 
 @bot.command(name='summary')
-async def summary(ctx: Context, channel: discord.TextChannel = None) -> None:
+async def summary(ctx: Context, *channels: discord.TextChannel) -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.playing, name="channel summary..."))
     logger.debug("Status updated to: [playing] channel summary...")
 
-    if channel is None:
-        await ctx.send("Please specify a channel to summarize. Example: !summary #market-analysis")
+    if not channels:
+        await ctx.send("Please specify one or more channels to summarize. Example: !summary #crypto-news #newsfeed")
         await reset_status()
         return
 
-    if not channel.permissions_for(channel.guild.me).read_messages:
-        await ctx.send(f"I don't have permission to read messages in {channel.mention}.")
-        logger.warning(f"Missing permissions to read messages in channel {channel.name}")
+    # Check permissions for all channels
+    channels_without_permission = []
+    valid_channels = []
+    
+    for channel in channels:
+        if not channel.permissions_for(channel.guild.me).read_messages:
+            channels_without_permission.append(channel.mention)
+            logger.warning(f"Missing permissions to read messages in channel {channel.name}")
+        else:
+            valid_channels.append(channel)
+    
+    if channels_without_permission:
+        await ctx.send(f"I don't have permission to read messages in: {', '.join(channels_without_permission)}")
+    
+    if not valid_channels:
         await reset_status()
         return
 
     # Log the summary command query
     if db_manager.pool:
         username = f"{ctx.author.name}#{ctx.author.discriminator}" if ctx.author.discriminator != "0" else ctx.author.name
+        channel_names = ", ".join([f"#{ch.name}" for ch in valid_channels])
         await db_manager.log_user_query(
             user_id=ctx.author.id,
             username=username,
             command="summary",
-            query_text=f"Summary request for #{channel.name}",
+            query_text=f"Summary request for {channel_names}",
             channel_id=ctx.channel.id,
             guild_id=ctx.guild.id if ctx.guild else None,
             response_generated=False
         )
 
     command_counter['summary'] += 1
-    await perform_channel_summary(ctx, channel, command='summary')
+    
+    # Process each channel
+    for channel in valid_channels:
+        await perform_channel_summary(ctx, channel, command='summary')
+    
     await reset_status()
 
 async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, command: Optional[str] = None) -> None:
