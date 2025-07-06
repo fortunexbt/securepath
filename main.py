@@ -1265,11 +1265,327 @@ async def summary(ctx: Context, *channels: discord.TextChannel) -> None:
 
     command_counter['summary'] += 1
     
-    # Process each channel
-    for channel in valid_channels:
-        await perform_channel_summary(ctx, channel, command='summary')
+    # Process multiple channels together for unified summary
+    await perform_multi_channel_summary(ctx, valid_channels, command='summary')
     
     await reset_status()
+
+async def perform_multi_channel_summary(ctx: Context, channels: List[discord.TextChannel], command: Optional[str] = None) -> None:
+    logger.info(f"Starting multi-channel summary for: {[ch.name for ch in channels]}")
+    
+    # Send enhanced status message with progress tracking
+    channel_mentions = ", ".join([ch.mention for ch in channels])
+    status_embed = discord.Embed(
+        title="🔍 Analyzing Multiple Channels",
+        description=f"Processing messages from {channel_mentions} (last 72 hours)...",
+        color=0x1D82B6
+    )
+    status_embed.add_field(name="Status", value="🔄 Fetching messages from all channels...", inline=False)
+    status_msg = await ctx.send(embed=status_embed)
+    
+    try:
+        time_limit = datetime.now(timezone.utc) - timedelta(hours=72)
+        all_channel_messages = {}
+        total_message_count = 0
+        
+        # Fetch messages from all channels concurrently
+        async def fetch_channel_messages(channel):
+            messages = []
+            message_count = 0
+            
+            async for msg in channel.history(after=time_limit, limit=3000, oldest_first=True):
+                message_count += 1
+                content = msg.content.strip()
+                if (content and 
+                    len(content) > 5 and
+                    not content.startswith(('!ping', '!help', '!commands', '!stats', '!test'))):
+                    author_name = msg.author.display_name if not msg.author.bot else f"🤖{msg.author.display_name}"
+                    messages.append(f"[{channel.name}/{author_name}]: {content}")
+            
+            logger.info(f"Fetched {len(messages)} messages from {channel.name}")
+            return channel.name, messages, message_count
+        
+        # Fetch from all channels concurrently
+        fetch_tasks = [fetch_channel_messages(channel) for channel in channels]
+        results = await asyncio.gather(*fetch_tasks)
+        
+        # Combine all messages
+        all_messages = []
+        for channel_name, messages, count in results:
+            all_channel_messages[channel_name] = messages
+            all_messages.extend(messages)
+            total_message_count += count
+        
+        logger.info(f"Total messages collected: {len(all_messages)} from {len(channels)} channels")
+        
+        if not all_messages:
+            error_embed = discord.Embed(
+                title="⚠️ No Content Found",
+                description=f"No substantial messages found in any of the specified channels from the last 72 hours.",
+                color=0xFF6B35
+            )
+            await status_msg.edit(embed=error_embed)
+            return
+        
+        # Update status
+        status_embed.set_field_at(0, name="Status", value=f"🧠 Processing {len(all_messages)} messages from {len(channels)} channels...", inline=False)
+        await status_msg.edit(embed=status_embed)
+        
+        # Create chunks from combined messages
+        full_text = "\n".join(all_messages)
+        chunk_size = 15000
+        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)]
+        
+        logger.info(f"Processing {len(chunks)} chunks for multi-channel summary")
+        
+        completed_chunks = 0
+        start_time = time.time()
+        
+        async def process_chunk(i, chunk):
+            nonlocal completed_chunks
+            channel_names = ", ".join([ch.name for ch in channels])
+            prompt = f"""analyze messages from multiple channels ({channel_names}) and extract unified actionable intelligence:
+            
+**focus areas:**
+• cross-channel market sentiment & themes
+• correlations between different channels
+• price movements & volume patterns across discussions
+• breaking news & catalyst events from all sources
+• whale activity & large transactions mentioned
+• technical analysis consensus
+• regulatory developments
+• project updates & partnerships
+
+**output format:**
+- bullet points only, no tables
+- synthesize insights across channels
+- include specific numbers/percentages
+- flag high-impact info with 🚨
+- note which channel(s) information came from when relevant
+- experienced trader tone
+
+MESSAGES:
+{chunk}"""
+            
+            for attempt in range(2):
+                try:
+                    response = await aclient.chat.completions.create(
+                        model='gpt-4.1',
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1500,
+                        temperature=0.3
+                    )
+                    result = response.choices[0].message.content.strip()
+                    increment_api_call_counter()
+                    
+                    # Track processing cost
+                    if hasattr(response, 'usage') and response.usage:
+                        usage = response.usage
+                        input_tokens = getattr(usage, 'prompt_tokens', 0)
+                        output_tokens = getattr(usage, 'completion_tokens', 0)
+                        cost = (input_tokens * 0.40 + output_tokens * 1.60) / 1_000_000
+                        
+                        if not hasattr(process_chunk, 'total_cost'):
+                            process_chunk.total_cost = 0
+                            process_chunk.total_input_tokens = 0
+                            process_chunk.total_output_tokens = 0
+                        process_chunk.total_cost += cost
+                        process_chunk.total_input_tokens += input_tokens
+                        process_chunk.total_output_tokens += output_tokens
+                    
+                    logger.info(f"Successfully processed chunk {i+1}/{len(chunks)}")
+                    
+                    # Update progress
+                    completed_chunks += 1
+                    try:
+                        progress_embed = status_msg.embeds[0]
+                        progress_percentage = (completed_chunks / len(chunks)) * 100
+                        filled_blocks = int(progress_percentage / 10)
+                        empty_blocks = 10 - filled_blocks
+                        progress_bar = "█" * filled_blocks + "░" * empty_blocks
+                        
+                        elapsed_time = time.time() - start_time
+                        if completed_chunks > 0:
+                            avg_time_per_chunk = elapsed_time / completed_chunks
+                            remaining_chunks = len(chunks) - completed_chunks
+                            eta_seconds = int(avg_time_per_chunk * remaining_chunks)
+                            eta_text = f" • ETA: {eta_seconds}s" if eta_seconds > 0 else " • Almost done!"
+                        else:
+                            eta_text = ""
+                        
+                        progress_embed.set_field_at(0,
+                            name="Status",
+                            value=f"⚙️ Processing chunks: {completed_chunks}/{len(chunks)}\n{progress_bar} {progress_percentage:.0f}%{eta_text}",
+                            inline=False
+                        )
+                        await status_msg.edit(embed=progress_embed)
+                    except (discord.NotFound, IndexError):
+                        pass
+                    
+                    return result
+                    
+                except Exception as e:
+                    logger.warning(f"Attempt {attempt+1} failed for chunk {i+1}: {e}")
+                    if attempt == 1:
+                        logger.error(f"Failed to process chunk {i+1} after retries")
+                        return None
+                    await asyncio.sleep(1)
+            return None
+        
+        # Process all chunks concurrently
+        status_embed.set_field_at(0, name="Status", value=f"⚙️ Processing {len(chunks)} chunks concurrently...", inline=False)
+        await status_msg.edit(embed=status_embed)
+        
+        tasks = [process_chunk(i, chunk) for i, chunk in enumerate(chunks)]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        # Filter results
+        chunk_summaries = []
+        for r in results:
+            if r and not isinstance(r, Exception) and len(r.strip()) > 50:
+                chunk_summaries.append(r)
+            elif isinstance(r, Exception):
+                logger.error(f"Chunk processing exception: {r}")
+        
+        if not chunk_summaries:
+            error_embed = discord.Embed(
+                title="❌ Processing Failed",
+                description=f"Unable to process messages from the specified channels.",
+                color=0xFF0000
+            )
+            await status_msg.edit(embed=error_embed)
+            return
+        
+        # Update status for final synthesis
+        status_embed.set_field_at(0, name="Status", value=f"🧑‍💻 Synthesizing {len(chunk_summaries)} summaries across {len(channels)} channels...", inline=False)
+        await status_msg.edit(embed=status_embed)
+        
+        # Enhanced final synthesis prompt for multiple channels
+        current_date = datetime.now().strftime("%Y-%m-%d")
+        channel_names = ", ".join([f"#{ch.name}" for ch in channels])
+        final_prompt = f"""Synthesize these multi-channel summaries into unified actionable intelligence for crypto traders/investors.
+
+DATE: {current_date}
+CHANNELS: {channel_names}
+TIMEFRAME: Last 72 hours
+TOTAL MESSAGES: {len(all_messages):,}
+
+**structure your response:**
+
+**📈 unified market sentiment**
+[cross-channel sentiment analysis with confidence %]
+
+**🚨 key events (by channel)**
+• [significant developments with channel source noted]
+
+**💰 price action consensus**
+• [price movements and levels discussed across channels]
+
+**🔍 technical analysis synthesis**
+• [converging/diverging technical views across channels]
+
+**🏦 regulatory/news compilation**
+• [updates from all channels, note sources]
+
+**🐋 whale activity tracker**
+• [large transactions mentioned across channels]
+
+**🔄 cross-channel insights**
+• [unique correlations or contradictions between channels]
+
+**⚡ actionable insights**
+• [unified trading opportunities and risk factors]
+
+synthesize information across all channels, noting agreements and divergences. identify unique alpha from cross-channel analysis.
+
+CHUNK SUMMARIES:
+{chr(10).join(chunk_summaries)}"""
+        
+        try:
+            response = await aclient.chat.completions.create(
+                model='gpt-4.1',
+                messages=[{"role": "user", "content": final_prompt}],
+                max_tokens=3000,  # Increased for multi-channel output
+                temperature=0.2
+            )
+            final_summary = response.choices[0].message.content.strip()
+            increment_api_call_counter()
+            
+            # Calculate total cost
+            total_cost = getattr(process_chunk, 'total_cost', 0)
+            total_input = getattr(process_chunk, 'total_input_tokens', 0)
+            total_output = getattr(process_chunk, 'total_output_tokens', 0)
+            
+            if hasattr(response, 'usage') and response.usage:
+                usage = response.usage
+                final_input = getattr(usage, 'prompt_tokens', 0)
+                final_output = getattr(usage, 'completion_tokens', 0)
+                final_cost = (final_input * 0.40 + final_output * 1.60) / 1_000_000
+                total_cost += final_cost
+                total_input += final_input
+                total_output += final_output
+            
+            # Log to database
+            await log_usage_to_db(
+                user=ctx.author,
+                command="summary",
+                model="gpt-4.1",
+                input_tokens=total_input,
+                output_tokens=total_output,
+                cost=total_cost,
+                guild_id=ctx.guild.id if ctx.guild else None,
+                channel_id=ctx.channel.id
+            )
+            
+            # Delete status message and send final result
+            await status_msg.delete()
+            
+            # Create summary embed
+            summary_embed = discord.Embed(
+                title=f"📄 Multi-Channel Intelligence Report",
+                description=f"**Channels:** {channel_names}\n**Timeframe:** Last 72 hours | **Total Messages:** {len(all_messages):,}",
+                color=0x1D82B6,
+                timestamp=datetime.now(timezone.utc)
+            )
+            
+            summary_embed.set_footer(text=f"SecurePath Agent • Cost: ${total_cost:.4f} | Processed {len(chunks)} chunks")
+            
+            # Send summary
+            try:
+                if len(final_summary) <= 3800:
+                    summary_embed.description += f"\n\n{final_summary}"
+                    await ctx.send(embed=summary_embed)
+                else:
+                    await ctx.send(embed=summary_embed)
+                    await send_long_embed(
+                        ctx.channel,
+                        final_summary,
+                        color=0x1D82B6,
+                        title="📈 Detailed Multi-Channel Analysis"
+                    )
+            except discord.HTTPException as e:
+                logger.error(f"Failed to send summary embed: {e}")
+                fallback_text = f"**Multi-Channel Summary - {channel_names}**\n\n{final_summary[:1800]}{'...' if len(final_summary) > 1800 else ''}"
+                await ctx.send(fallback_text)
+            
+            logger.info(f"Successfully sent multi-channel summary (Cost: ${total_cost:.4f})")
+            await log_interaction(user=ctx.author, channel=ctx.channel, command=command, user_input=f"Multi-channel summary: {channel_names}", bot_response=final_summary[:1024])
+            
+        except Exception as e:
+            logger.error(f"Error generating final summary: {e}")
+            logger.error(traceback.format_exc())
+            error_embed = discord.Embed(
+                title="❌ Synthesis Failed",
+                description="An error occurred while generating the final summary.",
+                color=0xFF0000
+            )
+            error_embed.add_field(name="Error", value=str(e)[:1000], inline=False)
+            await status_msg.edit(embed=error_embed)
+            
+    except Exception as e:
+        logger.error(f"Error in perform_multi_channel_summary: {e}")
+        logger.error(traceback.format_exc())
+        await ctx.send(f"An error occurred while processing the multi-channel summary.")
 
 async def perform_channel_summary(ctx: Context, channel: discord.TextChannel, command: Optional[str] = None) -> None:
     logger.info(f"Starting summary for channel: {channel.name} (ID: {channel.id})")
