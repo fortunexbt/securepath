@@ -49,14 +49,15 @@ pip install -r requirements.txt
 # config (.env)
 DISCORD_TOKEN=your_token
 OWNER_ID=your_id
-PERPLEXITY_API_KEY=pplx-xxx  # or OPENAI_API_KEY
+PERPLEXITY_API_KEY=pplx-xxx
+OPENAI_API_KEY=  # or OPENAI_API_KEY
 DATABASE_URL=postgresql://...  # optional but recommended
 
 # run
 python main.py
 ```
 
-## architecture
+## architecture (soon... refactoring is a WIP)
 
 ```
 src/
