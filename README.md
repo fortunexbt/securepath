@@ -1,171 +1,148 @@
-# SecurePath AI Discord Bot
+# securepath 🚀
 
-SecurePath AI is a high-performance Discord bot engineered for the crypto and DeFi world. It integrates with AI models to deliver real-time insights, advanced chart analysis, and blockchain intelligence, all within Discord. Designed to scale, SecurePath AI leverages efficient caching, dynamic logging, and API handling to ensure it provides top-tier information with minimal delays.
+> elite discord bot for crypto degens who actually know what they're doing
 
-## Key Features
-
-- **Expert Crypto Insights**: Responds to user queries with advanced DeFi and blockchain information.
-- **Image and Chart Analysis**: Processes charts through the Vision API and provides quant-level technical analysis.
-- **Contextual Conversation Flow**: Maintains awareness across user interactions, making conversations coherent and dynamic.
-- **Rich Logging with `rich`**: Provides highly detailed, colorful logs to make debugging and monitoring seamless.
-- **API Rate Management**: Ensures graceful API handling with rate limiting, retry mechanisms, and automatic error recovery.
-
----
-
-## Installation Guide
-
-### Prerequisites
-
-- **Python 3.9+**
-- **`pip`** (Python package manager)
-- **Git**
-- **Discord Bot Token**: Setup required in the [Discord Developer Portal](https://discord.com/developers/applications).
-- **API Key**: Required for using OpenAI or Perplexity.
-
-### Step 1: Clone the Repository
-
-```bash
-git clone https://github.com/fortunexbt/securepath.git
-cd securepath
+```
+ ██████╗ ███████╗ ██████╗██╗   ██╗██████╗ ███████╗██████╗  █████╗ ████████╗██╗  ██╗
+██╔════╝ ██╔════╝██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗╚══██╔══╝██║  ██║
+╚█████╗  █████╗  ██║     ██║   ██║██████╔╝█████╗  ██████╔╝███████║   ██║   ███████║
+ ╚═══██╗ ██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  ██╔═══╝ ██╔══██║   ██║   ██╔══██║
+██████╔╝ ███████╗╚██████╗╚██████╔╝██║  ██║███████╗██║     ██║  ██║   ██║   ██║  ██║
+╚═════╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
 ```
 
-### Step 2: Set Up a Virtual Environment
+[![Python](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square&logo=python)](https://www.python.org)
+[![Discord.py](https://img.shields.io/badge/discord.py-2.0+-5865f2.svg?style=flat-square&logo=discord)](https://discordpy.readthedocs.io/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+
+## what is this
+
+high-performance discord bot that actually understands crypto. built for traders who are tired of basic bots that can't tell the difference between a rug and a gem.
+
+- **ai-powered market analysis** - gpt-4/perplexity integration for real insights
+- **chart vision** - upload any chart, get actual technical analysis
+- **context-aware conversations** - remembers what you're talking about
+- **rate limiting that doesn't suck** - handles api limits like a boss
+- **rich logging** - debug in style with color-coded terminal output
+
+## quick start
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
+# clone it
+git clone https://github.com/fortunexbt/securepath.git && cd securepath
 
-### Step 3: Install Dependencies
+# venv (because we're not savages)
+python -m venv venv && source venv/bin/activate
 
-```bash
+# deps
 pip install -r requirements.txt
+
+# configure (see below)
+cp .env.example .env && nano .env
+
+# send it
+python main.py
 ```
 
-### Step 4: Configure Environment Variables
+## config
 
-Create a `.env` file in the root directory with your configuration:
+minimal `.env`:
 
-#### **Essential Configuration:**
+```env
+DISCORD_TOKEN=your_bot_token
+OWNER_ID=your_discord_id
 
-```
-DISCORD_TOKEN=your_discord_bot_token
-OWNER_ID=your_discord_user_id
-
-# If using OpenAI
-OPENAI_API_KEY=your_openai_api_key
-
-# If using Perplexity
-PERPLEXITY_API_KEY=your_perplexity_api_key
-PERPLEXITY_API_URL=https://api.perplexity.ai/chat/completions
-PERPLEXITY_TIMEOUT=60
-
-# Set to True if using Perplexity, otherwise it will default to OpenAI.
+# pick your fighter
+OPENAI_API_KEY=sk-...
+# or
+PERPLEXITY_API_KEY=pplx-...
 USE_PERPLEXITY_API=True
 ```
 
-- **`DISCORD_TOKEN`**: (Required) Your bot's authentication token from Discord.
-- **`OWNER_ID`**: (Required) Your Discord User ID, allowing you to manage privileged commands.
-- **`OPENAI_API_KEY`**: (Required if not using Perplexity) API key to use OpenAI's GPT models.
-- **`PERPLEXITY_API_KEY`**: (Required if using Perplexity) API key for Perplexity.
-- **`USE_PERPLEXITY_API`**: (Optional) Whether to use Perplexity or OpenAI APIs.
+<details>
+<summary>advanced config (for pros)</summary>
 
-#### **Optional Configuration:**
+```env
+# channels
+LOG_CHANNEL_ID=123456789
+SUMMARY_CHANNEL_ID=123456789
+NEWS_CHANNEL_ID=123456789
+CHARTIST_CHANNEL_ID=123456789
 
-```
-LOG_CHANNEL_ID=your_discord_log_channel_id
-SUMMARY_CHANNEL_ID=your_discord_summary_channel_id
-NEWS_CHANNEL_ID=your_discord_news_channel_id
-CHARTIST_CHANNEL_ID=your_discord_chartist_channel_id
-NEWS_BOT_USER_ID=your_news_bot_user_id
-
+# rate limits
 API_RATE_LIMIT_MAX=100
 API_RATE_LIMIT_INTERVAL=60
 DAILY_API_CALL_LIMIT=1000
 
+# context
 MAX_CONTEXT_MESSAGES=50
 MAX_CONTEXT_AGE=3600
+
+# logging
 LOG_LEVEL=INFO
-LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+```
+</details>
+
+## commands
+
+```
+!ask <question>       # get insights on anything crypto
+!vision <image>       # analyze charts like a quant
+!summary              # generate channel summaries
+!commands             # see all available commands
+!stats                # check bot usage stats
 ```
 
-- **`LOG_CHANNEL_ID`**: (Optional) Discord channel ID for logging bot activity. Defaults to no logging if not provided.
-- **`SUMMARY_CHANNEL_ID`**: (Optional) Used if generating summaries in specific channels.
-- **`NEWS_CHANNEL_ID`**: (Optional) ID of the news feed channel the bot can post summaries to.
-- **`CHARTIST_CHANNEL_ID`**: (Optional) Channel ID to track market charts and trends.
-- **`NEWS_BOT_USER_ID`**: (Optional) Used if monitoring or interacting with a bot that posts news updates.
+## architecture
 
----
+```
+src/
+├── ai/               # openai/perplexity services
+├── bot/              # discord client & cogs
+├── config/           # settings management
+├── database/         # sqlite models & repos
+├── services/         # rate limiting, context mgmt
+└── utils/            # helpers & formatters
+```
 
-### Step 5: Bot Configuration in Discord Developer Portal
+built with:
+- **discord.py** - async discord api wrapper
+- **sqlalchemy** - orm that doesn't get in the way
+- **rich** - terminal output that doesn't hurt your eyes
+- **asyncio** - because blocking is for boomers
 
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Select your bot application, navigate to **Bot**, and enable the following:
-   - **Message Content Intent**
-3. Save and generate the OAuth2 URL to invite your bot to your server.
+## deployment
 
-### Step 6: Running the Bot
-
-Once your `.env` is set up, run the bot:
-
+### local dev
 ```bash
 python main.py
 ```
 
-You should see real-time logs displayed in your terminal confirming the bot is running.
+### production
+- use systemd/supervisor for process management
+- set `LOG_LEVEL=WARNING` in prod
+- configure proper rate limits based on your api tier
+- consider redis for distributed caching if scaling
+
+## contributing
+
+1. fork it
+2. feature branch (`git checkout -b feature/sick-feature`)
+3. commit (`git commit -am 'add sick feature'`)
+4. push (`git push origin feature/sick-feature`)
+5. pr
+
+code style: black. no exceptions.
+
+## license
+
+MIT - do whatever you want with it
+
+## disclaimer
+
+nfa. dyor. if you lose money because of this bot, that's on you anon.
 
 ---
 
-## Advanced Features
-
-### Caching and Rate Limiting
-
-SecurePath AI uses advanced caching to avoid redundant API calls and enforces rate limits to prevent overuse. You can configure API call limits and intervals in the `.env`:
-
-```env
-API_RATE_LIMIT_MAX=100
-API_RATE_LIMIT_INTERVAL=60
-DAILY_API_CALL_LIMIT=1000
-```
-
-### Custom Context and Message Limits
-
-Fine-tune how much historical context the bot retains by adjusting these optional environment variables:
-
-```env
-MAX_CONTEXT_MESSAGES=50  # Number of messages stored in conversation history
-MAX_CONTEXT_AGE=3600     # Maximum age of messages in seconds
-```
-
-### Logging and Debugging
-
-Use the `LOG_CHANNEL_ID` and `LOG_LEVEL` to control logging. Logs will be sent to your specified Discord channel or can be viewed directly in the console. For example:
-
-```env
-LOG_CHANNEL_ID=1234567890
-LOG_LEVEL=DEBUG  # Can be INFO, DEBUG, WARNING, ERROR
-```
-
-### Dynamic Status and Presence
-
-The bot periodically updates its Discord presence, indicating its current task (e.g., analyzing charts or fetching market insights). The statuses rotate automatically during operation.
-
----
-
-## Troubleshooting
-
-- **Module Not Found**: Ensure the virtual environment is activated and dependencies installed via `pip install -r requirements.txt`.
-- **Bot Not Responding**: Check if the bot token and API key(s) are correctly set in your `.env`. Verify bot permissions on Discord.
-- **Rate Limiting**: If you hit the API limit, adjust the `API_RATE_LIMIT_MAX` and `DAILY_API_CALL_LIMIT` as needed.
-
----
-
-## License
-
-This project is licensed under the MIT License.
-
----
-
-## Disclaimer
-
-SecurePath AI provides information for educational purposes only and should not be considered financial advice. Always conduct your own research before making investment decisions.
+built by [@fortunexbt](https://github.com/fortunexbt) | [twitter](https://twitter.com/fortunexbt)

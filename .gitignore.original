@@ -1,0 +1,12 @@
+/*
+
+!/.gitignore
+
+!/main.py
+!/config.py
+!/database.py
+!/requirements.txt
+!/runtime.txt
+!/README.md
+!/.dockerignore
+!/Procfile
