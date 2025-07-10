@@ -1,148 +1,159 @@
-# securepath 🚀
+<p align="center">
+  <img width="120" height="120" alt="logo refresh small copy" src="https://github.com/user-attachments/assets/d4a94780-987d-41de-958c-7b9fa468dce1" />
+</p>
 
-> elite discord bot for crypto degens who actually know what they're doing
+<p align="center">
+  <i>"show me the docs, show me the code" - elite crypto research bot that actually ships</i>
+</p>
 
+<p align="center">
+<pre>
+        ███████╗███████╗ ██████╗██╗   ██╗██████╗ ███████╗██████╗  █████╗ ████████╗██╗  ██╗
+        ██╔════╝██╔════╝██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗╚══██╔══╝██║  ██║
+        ███████╗█████╗  ██║     ██║   ██║██████╔╝█████╗  ██████╔╝███████║   ██║   ███████║
+        ╚════██║██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  ██╔═══╝ ██╔══██║   ██║   ██╔══██║
+        ███████║███████╗╚██████╗╚██████╔╝██║  ██║███████╗██║     ██║  ██║   ██║   ██║  ██║
+        ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
+</pre>
+
+
+
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square&logo=python)](https://www.python.org)
+[![Discord.py](https://img.shields.io/badge/discord.py-2.3+-5865f2.svg?style=flat-square&logo=discord)](https://discordpy.readthedocs.io/)
+[![PostgreSQL](https://img.shields.io/badge/postgresql-asyncpg-336791.svg?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
+[![GPT-4.1](https://img.shields.io/badge/gpt--4.1-vision-00A67E.svg?style=flat-square&logo=openai)](https://openai.com)
+
+## what
+
+discord bot that cuts through crypto noise. real-time research, chart analysis, channel intel. built for degens who need alpha, not hype.
+
+```python
+# three commands that matter
+!ask     # perplexity sonar-pro → elite sources only
+!analyze # gpt-4.1 vision → technical chart breakdowns  
+!summary # channel intelligence → 72hr market pulse
 ```
- ██████╗ ███████╗ ██████╗██╗   ██╗██████╗ ███████╗██████╗  █████╗ ████████╗██╗  ██╗
-██╔════╝ ██╔════╝██╔════╝██║   ██║██╔══██╗██╔════╝██╔══██╗██╔══██╗╚══██╔══╝██║  ██║
-╚█████╗  █████╗  ██║     ██║   ██║██████╔╝█████╗  ██████╔╝███████║   ██║   ███████║
- ╚═══██╗ ██╔══╝  ██║     ██║   ██║██╔══██╗██╔══╝  ██╔═══╝ ██╔══██║   ██║   ██╔══██║
-██████╔╝ ███████╗╚██████╗╚██████╔╝██║  ██║███████╗██║     ██║  ██║   ██║   ██║  ██║
-╚═════╝  ╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝
-```
 
-[![Python](https://img.shields.io/badge/python-3.9+-blue.svg?style=flat-square&logo=python)](https://www.python.org)
-[![Discord.py](https://img.shields.io/badge/discord.py-2.0+-5865f2.svg?style=flat-square&logo=discord)](https://discordpy.readthedocs.io/)
-[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg?style=flat-square)](https://github.com/psf/black)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square)](http://makeapullrequest.com)
+## features that actually work
 
-## what is this
+- **real-time research** - perplexity sonar-pro api, filtered to ethereum.org, defillama, etherscan, coingecko, github
+- **chart vision** - gpt-4.1 vision for technical analysis: patterns, levels, volume, risk/reward
+- **channel summaries** - concurrent chunk processing, 72hr lookback, market sentiment extraction
+- **context memory** - maintains conversation flow (50 msg / 1hr default)
+- **postgres analytics** - full usage tracking, cost analysis, user metrics
+- **rate limiting** - per-user limits, daily caps, graceful handling
 
-high-performance discord bot that actually understands crypto. built for traders who are tired of basic bots that can't tell the difference between a rug and a gem.
-
-- **ai-powered market analysis** - gpt-4/perplexity integration for real insights
-- **chart vision** - upload any chart, get actual technical analysis
-- **context-aware conversations** - remembers what you're talking about
-- **rate limiting that doesn't suck** - handles api limits like a boss
-- **rich logging** - debug in style with color-coded terminal output
-
-## quick start
+## setup
 
 ```bash
-# clone it
-git clone https://github.com/fortunexbt/securepath.git && cd securepath
+# clone
+git clone https://github.com/fortunexbt/securepath && cd securepath
 
-# venv (because we're not savages)
+# env
 python -m venv venv && source venv/bin/activate
 
 # deps
 pip install -r requirements.txt
 
-# configure (see below)
-cp .env.example .env && nano .env
+# config (.env)
+DISCORD_TOKEN=your_token
+OWNER_ID=your_id
+PERPLEXITY_API_KEY=pplx-xxx
+OPENAI_API_KEY=  # or OPENAI_API_KEY
+DATABASE_URL=postgresql://...  # optional but recommended
 
-# send it
+# run
 python main.py
 ```
 
-## config
+## architecture (soon... refactoring is a WIP)
 
-minimal `.env`:
-
-```env
-DISCORD_TOKEN=your_bot_token
-OWNER_ID=your_discord_id
-
-# pick your fighter
-OPENAI_API_KEY=sk-...
-# or
-PERPLEXITY_API_KEY=pplx-...
-USE_PERPLEXITY_API=True
+```
+src/
+├── ai/               # perplexity + openai services
+├── bot/              
+│   ├── client.py     # custom bot with context manager
+│   └── cogs/         # ai_commands, summary_commands, admin
+├── database/         
+│   ├── models.py     # usage tracking schema
+│   └── repositories/ # analytics & usage repos
+└── services/         # rate limiter, context manager
 ```
 
-<details>
-<summary>advanced config (for pros)</summary>
+tech stack:
+- **discord.py 2.3+** - async discord wrapper
+- **asyncpg** - postgres without the bloat
+- **perplexity sonar-pro** - real-time web search
+- **gpt-4.1 + vision** - when you need the heavy artillery
+- **rich** - console output that doesn't suck
 
-```env
-# channels
-LOG_CHANNEL_ID=123456789
-SUMMARY_CHANNEL_ID=123456789
-NEWS_CHANNEL_ID=123456789
-CHARTIST_CHANNEL_ID=123456789
+## deployment
 
-# rate limits
-API_RATE_LIMIT_MAX=100
-API_RATE_LIMIT_INTERVAL=60
-DAILY_API_CALL_LIMIT=1000
+optimized for heroku but runs anywhere:
 
-# context
-MAX_CONTEXT_MESSAGES=50
-MAX_CONTEXT_AGE=3600
+```bash
+# heroku
+heroku create your-app
+heroku addons:create heroku-postgresql:mini
+heroku config:set DISCORD_TOKEN=xxx PERPLEXITY_API_KEY=xxx
+git push heroku main
 
-# logging
-LOG_LEVEL=INFO
+# docker/k8s
+# Dockerfile included, scale horizontally with redis
 ```
-</details>
+
+includes:
+- health check endpoint
+- connection pooling
+- concurrent processing
+- token caching (reduces costs ~40%)
+- single instance locking
 
 ## commands
 
 ```
-!ask <question>       # get insights on anything crypto
-!vision <image>       # analyze charts like a quant
-!summary              # generate channel summaries
-!commands             # see all available commands
-!stats                # check bot usage stats
+PUBLIC
+!ask <query>          # real-time crypto research with sources
+!analyze [image]      # chart analysis (attach or use recent)
+!summary #channel     # 72hr channel intelligence extraction
+!commands             # help menu
+!ping                 # latency + system status
+
+ADMIN (owner only)
+!stats                # comprehensive usage analytics
+!token_usage          # cost breakdown by model
+!cache_stats          # cache performance metrics
 ```
 
-## architecture
+## pro tips
 
-```
-src/
-├── ai/               # openai/perplexity services
-├── bot/              # discord client & cogs
-├── config/           # settings management
-├── database/         # sqlite models & repos
-├── services/         # rate limiting, context mgmt
-└── utils/            # helpers & formatters
-```
-
-built with:
-- **discord.py** - async discord api wrapper
-- **sqlalchemy** - orm that doesn't get in the way
-- **rich** - terminal output that doesn't hurt your eyes
-- **asyncio** - because blocking is for boomers
-
-## deployment
-
-### local dev
-```bash
-python main.py
-```
-
-### production
-- use systemd/supervisor for process management
-- set `LOG_LEVEL=WARNING` in prod
-- configure proper rate limits based on your api tier
-- consider redis for distributed caching if scaling
+1. **sources matter** - bot filters to elite crypto sites only
+2. **context aware** - maintains conversation history, ask follow-ups
+3. **multi-channel summaries** - `!summary #general #trading #alpha`
+4. **dm support** - full features work in dms with context
 
 ## contributing
 
-1. fork it
-2. feature branch (`git checkout -b feature/sick-feature`)
-3. commit (`git commit -am 'add sick feature'`)
-4. push (`git push origin feature/sick-feature`)
-5. pr
+prs welcome if you:
+- improve performance
+- add degen features
+- fix bugs
+- make it more based
 
-code style: black. no exceptions.
+```bash
+git checkout -b feature/your-feature
+# make changes
+git commit -m "feat: add based feature"
+git push origin feature/your-feature
+# open pr
+```
 
 ## license
 
-MIT - do whatever you want with it
-
-## disclaimer
-
-nfa. dyor. if you lose money because of this bot, that's on you anon.
+MIT - ship it
 
 ---
 
-built by [@fortunexbt](https://github.com/fortunexbt) | [twitter](https://twitter.com/fortunexbt)
+built by [@fortunexbt](https://github.com/fortunexbt) | powered by gpt-4 + perplexity
+
+*"in crypto, speed and accuracy determine survival. this bot delivers both."*
