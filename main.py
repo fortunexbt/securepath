@@ -192,7 +192,7 @@ def get_context_messages(user_id: int) -> List[Dict[str, str]]:
 
     return cleaned_messages
 
-def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') -> str:
+def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4.1-mini') -> str:
     encoding = encoding_for_model(model)
     tokens = encoding.encode(prompt)
     if len(tokens) > max_tokens:
