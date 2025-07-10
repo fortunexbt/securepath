@@ -21,7 +21,7 @@ discord bot that cuts through crypto noise. real-time research, chart analysis, 
 ```python
 # three commands that matter
 !ask     # perplexity sonar-pro → elite sources only
-!analyze # gpt-4 vision → technical chart breakdowns  
+!analyze # gpt-4.1 vision → technical chart breakdowns  
 !summary # channel intelligence → 72hr market pulse
 ```
 
