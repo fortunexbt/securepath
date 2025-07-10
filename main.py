@@ -436,7 +436,7 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
             await log_usage_to_db(
                 user=user,
                 command=command,
-                model="gpt-4.1",
+                model="gpt-4.1-mini",
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 cached_tokens=cached_tokens,
@@ -445,8 +445,8 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
                 channel_id=channel_id
             )
 
-        logger.info(f"OpenAI GPT-4.1 usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-        logger.info(f"Estimated OpenAI GPT-4.1 API call cost: ${cost:.6f}")
+        logger.info(f"OpenAI GPT-4.1-mini usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI GPT-4.1-mini API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
@@ -1370,7 +1370,7 @@ MESSAGES:
             for attempt in range(2):
                 try:
                     response = await aclient.chat.completions.create(
-                        model='gpt-4.1',
+                        model='gpt-4.1-mini',
                         messages=[{"role": "user", "content": prompt}],
                         max_tokens=1500,
                         temperature=0.3
@@ -1503,7 +1503,7 @@ CHUNK SUMMARIES:
         
         try:
             response = await aclient.chat.completions.create(
-                model='gpt-4.1',
+                model='gpt-4.1-mini',
                 messages=[{"role": "user", "content": final_prompt}],
                 max_tokens=3000,  # Increased for multi-channel output
                 temperature=0.2
@@ -1529,7 +1529,7 @@ CHUNK SUMMARIES:
             await log_usage_to_db(
                 user=ctx.author,
                 command="summary",
-                model="gpt-4.1",
+                model="gpt-4.1-mini",
                 input_tokens=total_input,
                 output_tokens=total_output,
                 cost=total_cost,
@@ -1709,7 +1709,7 @@ MESSAGES:
             for attempt in range(2):  # Retry logic
                 try:
                     response = await aclient.chat.completions.create(
-                        model='gpt-4.1', 
+                        model='gpt-4.1-mini', 
                         messages=[{"role": "user", "content": prompt}], 
                         max_tokens=1500,  # Increased for better quality
                         temperature=0.3  # Lower temperature for more focused output
@@ -1844,7 +1844,7 @@ CHUNK SUMMARIES:
         
         try:
             response = await aclient.chat.completions.create(
-                model='gpt-4.1', 
+                model='gpt-4.1-mini', 
                 messages=[{"role": "user", "content": final_prompt}], 
                 max_tokens=2500,  # Increased for comprehensive output
                 temperature=0.2   # Lower for more focused synthesis
@@ -1871,7 +1871,7 @@ CHUNK SUMMARIES:
             await log_usage_to_db(
                 user=ctx.author,
                 command="summary",
-                model="gpt-4.1",
+                model="gpt-4.1-mini",
                 input_tokens=total_input,
                 output_tokens=total_output,
                 cost=total_cost,
