@@ -192,7 +192,7 @@ def get_context_messages(user_id: int) -> List[Dict[str, str]]:
 
     return cleaned_messages
 
-def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-4o-mini') -> str:
+def truncate_prompt(prompt: str, max_tokens: int, model: str = 'gpt-5') -> str:
     encoding = encoding_for_model(model)
     tokens = encoding.encode(prompt)
     if len(tokens) > max_tokens:
@@ -401,7 +401,7 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
 
     try:
         response = await aclient.chat.completions.create(
-            model='gpt-4.1',
+            model='gpt-5',
             messages=messages,
             max_tokens=2000,
             temperature=0.7,
@@ -421,11 +421,11 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
 
         if is_cached:
             usage_data['openai_gpt41']['cached_input_tokens'] += cached_tokens
-            cost = (cached_tokens / 1_000_000 * 0.30) + (completion_tokens / 1_000_000 * 1.20)  # GPT-4.1 cached pricing
+            cost = (cached_tokens / 1_000_000 * 0.30) + (completion_tokens / 1_000_000 * 1.20)  # gpt-5 cached pricing
             logger.debug(f"Cache hit detected. Cached Tokens: {cached_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
         else:
             usage_data['openai_gpt41']['input_tokens'] += prompt_tokens
-            cost = (prompt_tokens / 1_000_000 * 0.60) + (completion_tokens / 1_000_000 * 2.40)  # GPT-4.1 pricing
+            cost = (prompt_tokens / 1_000_000 * 0.60) + (completion_tokens / 1_000_000 * 2.40)  # gpt-5 pricing
             logger.debug(f"No cache hit. Prompt Tokens: {prompt_tokens}, Completion Tokens: {completion_tokens}, Cost: ${cost:.6f}")
 
         usage_data['openai_gpt41']['cost'] += cost
@@ -436,7 +436,7 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
             await log_usage_to_db(
                 user=user,
                 command=command,
-                model="gpt-4.1",
+                model="gpt-5",
                 input_tokens=prompt_tokens,
                 output_tokens=completion_tokens,
                 cached_tokens=cached_tokens,
@@ -445,8 +445,8 @@ async def fetch_openai_response(user_id: int, new_message: str, user: Optional[d
                 channel_id=channel_id
             )
 
-        logger.info(f"OpenAI GPT-4.1 usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
-        logger.info(f"Estimated OpenAI GPT-4.1 API call cost: ${cost:.6f}")
+        logger.info(f"OpenAI gpt-5 usage: Prompt Tokens={prompt_tokens}, Cached Tokens={cached_tokens}, Completion Tokens={completion_tokens}, Total Tokens={total_tokens}")
+        logger.info(f"Estimated OpenAI gpt-5 API call cost: ${cost:.6f}")
         return answer
     except Exception as e:
         logger.error(f"Error fetching response from OpenAI: {str(e)}")
@@ -641,7 +641,7 @@ async def process_message_with_streaming(message: discord.Message, status_msg: d
             logger.info(f"Perplexity response generated for user {user_id}")
             update_user_context(user_id, question or message.content, 'user')
             
-            # Update progress: Finalizing (skip GPT-4.1 redundancy for speed)
+            # Update progress: Finalizing (skip gpt-5 redundancy for speed)
             progress_embed.set_field_at(0, name="Status", value="✨ Finalizing response...", inline=False)
             await status_msg.edit(embed=progress_embed)
             
@@ -965,7 +965,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
 
         try:
             # Update progress: Processing image
-            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with GPT-4.1 Vision...", inline=False)
+            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with gpt-5 Vision...", inline=False)
             await status_msg.edit(embed=progress_embed)
             
             guild_id = ctx.guild.id if ctx.guild else None
@@ -1041,7 +1041,7 @@ async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
             value="`!analyze Look for support and resistance levels`", 
             inline=False
         )
-        help_embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 Vision")
+        help_embed.set_footer(text="SecurePath Agent • Powered by gpt-5 Vision")
         await ctx.send(embed=help_embed)
         logger.warning("No image URL detected for analysis.")
 
@@ -1060,7 +1060,6 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
             logger.warning(f"Image size {len(image_bytes)} bytes exceeds the maximum allowed size.")
             return "The submitted image is too large to analyze. Please provide an image smaller than 5 MB."
 
-        # Analysis based on the full image now, as gpt-4o handles it better
         base_prompt = (
             "analyze this chart with technical precision. extract actionable intelligence:\n\n"
             "**sentiment:** [bullish/bearish/neutral + confidence %]\n"
@@ -1075,7 +1074,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
         full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
         response = await aclient.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-5",
             messages=[
                 {
                     "role": "user",
@@ -1094,7 +1093,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
         # Update usage data - a simplified estimation as token count is complex
         # A more accurate method would parse the usage from the response if available
         estimated_tokens = 1000  # A rough estimate for a complex image
-        cost = (estimated_tokens / 1_000_000) * 0.60  # GPT-4.1 input pricing
+        cost = (estimated_tokens / 1_000_000) * 0.60  # gpt-5 input pricing
         
         usage_data['openai_gpt41_mini_vision']['requests'] += 1
         usage_data['openai_gpt41_mini_vision']['tokens'] += estimated_tokens
@@ -1106,7 +1105,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
             await log_usage_to_db(
                 user=user,
                 command="analyze",
-                model="gpt-4.1-vision",
+                model="gpt-5-vision",
                 input_tokens=estimated_tokens,
                 output_tokens=500,  # Rough estimate
                 cost=cost,
@@ -1114,7 +1113,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
                 channel_id=channel_id
             )
         
-        logger.info(f"Estimated OpenAI GPT-4.1 Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
+        logger.info(f"Estimated OpenAI gpt-5 Vision usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
         return analysis
 
     except Exception as e:
@@ -1376,7 +1375,7 @@ MESSAGES:
             for attempt in range(2):  # Retry logic
                 try:
                     response = await aclient.chat.completions.create(
-                        model='gpt-4.1', 
+                        model='gpt-5', 
                         messages=[{"role": "user", "content": prompt}], 
                         max_tokens=1500,  # Increased for better quality
                         temperature=0.3  # Lower temperature for more focused output
@@ -1511,7 +1510,7 @@ CHUNK SUMMARIES:
         
         try:
             response = await aclient.chat.completions.create(
-                model='gpt-4.1', 
+                model='gpt-5', 
                 messages=[{"role": "user", "content": final_prompt}], 
                 max_tokens=2500,  # Increased for comprehensive output
                 temperature=0.2   # Lower for more focused synthesis
@@ -1538,7 +1537,7 @@ CHUNK SUMMARIES:
             await log_usage_to_db(
                 user=ctx.author,
                 command="summary",
-                model="gpt-4.1",
+                model="gpt-5",
                 input_tokens=total_input,
                 output_tokens=total_output,
                 cost=total_cost,
@@ -1728,7 +1727,7 @@ async def send_stats() -> None:
     else:
         embed.add_field(name="📊 Usage Stats", value="Database offline", inline=True)
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by gpt-5 & Perplexity Sonar-Pro")
     
     try:
         await channel.send(embed=embed)
@@ -1768,7 +1767,7 @@ async def cache_stats(ctx: Context) -> None:
         await ctx.send("You do not have permission to use this command.")
         return
     hit_rate = calculate_cache_hit_rate()
-    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI GPT-4.1 Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
+    embed = discord.Embed(title="📊 Cache Hit Rate", description=f"OpenAI gpt-5 Cache Hit Rate: **{hit_rate:.2f}%**", color=0x1D82B6)
     await ctx.send(embed=embed)
 
 def calculate_cache_hit_rate() -> float:
@@ -1872,7 +1871,7 @@ async def unified_stats(ctx: Context) -> None:
         inline=True
     )
     
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by gpt-5 & Perplexity Sonar-Pro")
     await ctx.send(embed=embed)
 
 
@@ -1897,7 +1896,7 @@ async def commands_help(ctx: Context) -> None:
               "▸ *example:* `!ask solana vs ethereum fees`\n\n"
               
               "**📊 `!analyze [image]`**\n"
-              "▸ advanced chart analysis with gpt-4.1 vision\n"
+              "▸ advanced chart analysis with gpt-5 vision\n"
               "▸ sentiment, key levels, patterns, trade setups\n"
               "▸ *attach image or use recent chart in channel*\n\n"
               
@@ -1932,7 +1931,7 @@ async def commands_help(ctx: Context) -> None:
     embed.add_field(name="", value="", inline=False)
     
     embed.set_footer(
-        text="SecurePath Agent • Powered by Perplexity Sonar-Pro & GPT-4.1 Vision"
+        text="SecurePath Agent • Powered by Perplexity Sonar-Pro & gpt-5 Vision"
     )
     
     await ctx.send(embed=embed)
@@ -1961,7 +1960,7 @@ async def ping(ctx: Context) -> None:
     embed.add_field(name="Response Time", value=f"{response_time}ms", inline=True)
     embed.add_field(name="Database", value=db_status, inline=True)
     embed.add_field(name="API Calls Today", value=f"{api_call_counter}", inline=True)
-    embed.set_footer(text="SecurePath Agent • Powered by GPT-4.1 & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by gpt-5 & Perplexity Sonar-Pro")
     
     await message.edit(content="", embed=embed)
 
