@@ -1931,7 +1931,7 @@ async def commands_help(ctx: Context) -> None:
     embed.add_field(name="", value="", inline=False)
     
     embed.set_footer(
-        text="SecurePath Agent • Powered by Perplexity Sonar-Pro & gpt-5 Vision"
+        text="SecurePath Agent • Powered by Perplexity Sonar-Pro & GPT-5 Vision"
     )
     
     await ctx.send(embed=embed)
@@ -1960,7 +1960,7 @@ async def ping(ctx: Context) -> None:
     embed.add_field(name="Response Time", value=f"{response_time}ms", inline=True)
     embed.add_field(name="Database", value=db_status, inline=True)
     embed.add_field(name="API Calls Today", value=f"{api_call_counter}", inline=True)
-    embed.set_footer(text="SecurePath Agent • Powered by gpt-5 & Perplexity Sonar-Pro")
+    embed.set_footer(text="SecurePath Agent • Powered by GPT-5 & Perplexity Sonar-Pro")
     
     await message.edit(content="", embed=embed)
 
