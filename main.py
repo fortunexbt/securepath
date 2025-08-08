@@ -884,7 +884,7 @@ async def send_startup_notification() -> None:
     dyno_name = os.environ.get('DYNO', 'local')
     embed.add_field(name="Dyno", value=f"`{dyno_name}`", inline=True)
     
-    embed.set_footer(text="Ready for commands • Mario's crypto agent")
+    embed.set_footer(text="Ready for commands • SecurePath Agent")
     
     try:
         await channel.send(embed=embed)
@@ -1882,7 +1882,7 @@ async def commands_help(ctx: Context) -> None:
     """Show SecurePath Agent help and available commands"""
     embed = discord.Embed(
         title="⚡ SecurePath Agent",
-        description="*mario's crypto agent • show me the docs, show me the code*",
+        description="*SecurePath Agent • show me the docs, show me the code*",
         color=0x00D4AA,  # SecurePath green
         timestamp=datetime.now(timezone.utc)
     )
