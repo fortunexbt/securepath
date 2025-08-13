@@ -7,6 +7,7 @@ import sys
 import time
 import traceback
 import base64
+import mimetypes
 from collections import Counter, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional
@@ -838,10 +839,12 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
 
     # locate an image
     img_url = None
+    mime_type_hint = None
     if ctx.message.attachments:
         att = ctx.message.attachments[0]
         if att.content_type and att.content_type.startswith("image/"):
             img_url = att.url
+            mime_type_hint = att.content_type
     elif isinstance(ctx.channel, discord.DMChannel):
         await ctx.send("Please attach an image to analyze.")
         return
@@ -851,6 +854,7 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
                 att = msg.attachments[0]
                 if att.content_type and att.content_type.startswith("image/"):
                     img_url = att.url
+                    mime_type_hint = att.content_type
                     break
 
     if not img_url:
@@ -872,13 +876,18 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
         async with session.get(img_url) as resp:
             resp.raise_for_status()
             img_bytes = await resp.read()
+            if not mime_type_hint:
+                mime_type_hint = resp.headers.get("Content-Type")
+
         if len(img_bytes) > MAX_IMAGE_SIZE_BYTES:
             await ctx.send("Image too large (max 5 MB).")
             await reset_status()
             return
 
+        # fallback MIME type detection if not provided
+        mime = mime_type_hint or mimetypes.guess_type(img_url)[0] or "image/png"
+
         # encode to base64 data URL
-        mime = "image/png"  # could sniff from content_type
         b64 = base64.b64encode(img_bytes).decode("ascii")
         data_url = f"data:{mime};base64,{b64}"
 
@@ -907,7 +916,7 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
                 "role": "user",
                 "content": [
                     {"type": "input_text", "text": full_prompt},
-                    {"type": "input_image", "image_url": {"url": data_url, "detail": "high"}}
+                    {"type": "input_image", "image_url": data_url}
                 ]
             }],
             max_output_tokens=1000
