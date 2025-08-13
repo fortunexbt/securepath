@@ -6,6 +6,7 @@ import os
 import sys
 import time
 import traceback
+import base64
 from collections import Counter, deque
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, List, Optional
