@@ -833,21 +833,18 @@ async def send_startup_notification() -> None:
     except discord.HTTPException as e:
         logger.error(f"Failed to send startup notification: {e}")
 
-logger = logging.getLogger("SecurePathAgent")
-
-@bot.command(name="analyze")
-async def analyze(ctx: commands.Context, *, user_prompt: str = "") -> None:
+@bot.command(name='analyze')
+async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
 
-    # locate image URL
-    img_url: Optional[str] = None
+    # locate an image
+    img_url = None
     if ctx.message.attachments:
         att = ctx.message.attachments[0]
         if att.content_type and att.content_type.startswith("image/"):
             img_url = att.url
     elif isinstance(ctx.channel, discord.DMChannel):
         await ctx.send("Please attach an image to analyze.")
-        await reset_status()
         return
     else:
         async for msg in ctx.channel.history(limit=5):
@@ -863,37 +860,30 @@ async def analyze(ctx: commands.Context, *, user_prompt: str = "") -> None:
         return
 
     # status embed
-    status = Embed(
+    status = discord.Embed(
         title="📈 Chart Analysis",
         description=f"Prompt: {user_prompt or 'Standard technical analysis'}",
         color=0x1D82B6
     )
-    status.add_field(name="Status", value="Fetching image...", inline=False)
-    status.set_thumbnail(url=img_url)
+    status.add_field(name="Status", value="Processing image...", inline=False)
     status_msg = await ctx.send(embed=status)
 
-    try:
-        # prompt
-        base_prompt = (
-            "analyze this chart with technical precision. extract actionable intelligence:\n"
-            "**sentiment:** [bullish/bearish/neutral + confidence %]\n"
-            "**key levels:** [support/resistance with exact prices]\n"
-            "**pattern:** [what you see + timeframe]\n"
-            "**volume:** [unusual activity + implications]\n"
-            "**risk/reward:** [entry/exit/stop levels]\n"
-            "**timeframe:** [best trade horizon]\n"
-            "**catalysts:** [what could move price]\n"
-            "bullet points only. experienced trader tone."
-        )
-        full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
+    base_prompt = (
+        "analyze this chart with technical precision. extract actionable intelligence:\n"
+        "**sentiment:** [bullish/bearish/neutral + confidence %]\n"
+        "**key levels:** [support/resistance with exact prices]\n"
+        "**pattern:** [what you see + timeframe]\n"
+        "**volume:** [unusual activity + implications]\n"
+        "**risk/reward:** [entry/exit/stop levels]\n"
+        "**timeframe:** [best trade horizon]\n"
+        "**catalysts:** [what could move price]\n"
+        "bullet points only. experienced trader tone."
+    )
+    full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
-        # update status
-        status.set_field_at(0, name="Status", value="Processing image with GPT-5 Vision...", inline=False)
-        await status_msg.edit(embed=status)
-
-        # call GPT-5 Vision
-        resp = await aclient.responses.create(
-            model="gpt-5",
+    async def run_analysis(model_name: str):
+        return await aclient.responses.create(
+            model=model_name,
             input=[{
                 "role": "user",
                 "content": [
@@ -904,9 +894,14 @@ async def analyze(ctx: commands.Context, *, user_prompt: str = "") -> None:
             max_output_tokens=1000
         )
 
-        logger.debug(f"Raw GPT-5 Vision response: {resp}")
+    try:
+        # try GPT-5 vision first
+        try:
+            resp = await run_analysis("gpt-5-vision-preview")
+        except Exception as e:
+            logger.warning(f"gpt-5-vision-preview failed: {e}, falling back to gpt-4o.")
+            resp = await run_analysis("gpt-4o")
 
-        # extract output safely
         analysis = getattr(resp, "output_text", None)
         if not analysis and hasattr(resp, "output"):
             parts = []
@@ -919,7 +914,6 @@ async def analyze(ctx: commands.Context, *, user_prompt: str = "") -> None:
         if not analysis:
             raise RuntimeError("Vision model returned empty output.")
 
-        # send final embed
         await status_msg.delete()
         await send_structured_analysis_embed(
             ctx.channel,
