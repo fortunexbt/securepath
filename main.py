@@ -832,218 +832,112 @@ async def send_startup_notification() -> None:
         logger.error(f"Failed to send startup notification: {e}")
 
 @bot.command(name='analyze')
-async def analyze(ctx: Context, *, user_prompt: str = '') -> None:
+async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
-    logger.debug("Status updated to: [watching] image analysis...")
 
-    if db_manager.pool:
-        username = f"{ctx.author.name}#{ctx.author.discriminator}" if ctx.author.discriminator != "0" else ctx.author.name
-        query_text = f"Image analysis request" + (f" with prompt: {user_prompt}" if user_prompt else " (no additional prompt)")
-        await db_manager.log_user_query(
-            user_id=ctx.author.id,
-            username=username,
-            command="analyze",
-            query_text=query_text,
-            channel_id=ctx.channel.id,
-            guild_id=ctx.guild.id if ctx.guild else None,
-            response_generated=False
-        )
-
-    chart_url = None
+    # locate an image
+    img_url = None
     if ctx.message.attachments:
-        attachment = ctx.message.attachments[0]
-        if attachment.content_type and attachment.content_type.startswith('image/'):
-            chart_url = attachment.url
-            logger.debug(f"Image attachment detected: {chart_url}")
+        att = ctx.message.attachments[0]
+        if att.content_type and att.content_type.startswith("image/"):
+            img_url = att.url
+    elif isinstance(ctx.channel, discord.DMChannel):
+        await ctx.send("Please attach an image to analyze.")
+        return
     else:
-        if isinstance(ctx.channel, discord.DMChannel):
-            await ctx.send("Please post the image you'd like to analyze.")
-            def check(msg):
-                return msg.author == ctx.author and msg.channel == ctx.channel and msg.attachments
-            try:
-                chart_message = await bot.wait_for('message', check=check, timeout=60.0)
-                chart_url = chart_message.attachments[0].url
-                logger.debug(f"Image uploaded in DM: {chart_url}")
-            except asyncio.TimeoutError:
-                await ctx.send("You took too long to post an image. Please try again.")
-                await reset_status()
-                return
-        else:
-            async for last_message in ctx.channel.history(limit=2):
-                if last_message.id != ctx.message.id and last_message.attachments:
-                    attachment = last_message.attachments[0]
-                    if attachment.content_type and attachment.content_type.startswith('image/'):
-                        chart_url = attachment.url
-                        logger.debug(f"Image found in recent channel messages: {chart_url}")
-                        break
-            if not chart_url:
-                async for older_message in ctx.channel.history(limit=20):
-                    if older_message.attachments:
-                        attachment = older_message.attachments[0]
-                        if attachment.content_type and attachment.content_type.startswith('image/'):
-                            chart_url = attachment.url
-                            logger.debug(f"Image found in older channel messages: {chart_url}")
-                            break
-    
-    if chart_url:
-        progress_embed = discord.Embed(
-            title="📈 SecurePath Agent Analysis",
-            description=f"**Image:** [Chart Analysis]({chart_url})\n**Prompt:** {user_prompt or 'Standard technical analysis'}",
-            color=0x1D82B6
-        )
-        progress_embed.add_field(name="Status", value="🔄 Initializing image analysis...", inline=False)
-        progress_embed.set_thumbnail(url=chart_url)
-        progress_embed.set_footer(text="SecurePath Agent • Real-time Analysis")
-        
-        status_msg = await ctx.send(embed=progress_embed)
-        logger.info(f"Chart URL detected: {chart_url}")
+        async for msg in ctx.channel.history(limit=5):
+            if msg.attachments:
+                att = msg.attachments[0]
+                if att.content_type and att.content_type.startswith("image/"):
+                    img_url = att.url
+                    break
 
-        try:
-            progress_embed.set_field_at(0, name="Status", value="🖼️ Processing image with GPT-5...", inline=False)
-            await status_msg.edit(embed=progress_embed)
-            
-            guild_id = ctx.guild.id if ctx.guild else None
-            image_analysis = await analyze_chart_image(
-                chart_url, 
-                user_prompt, 
-                user=ctx.author,
-                guild_id=guild_id,
-                channel_id=ctx.channel.id
-            )
+    if not img_url:
+        await ctx.send("No image found. Please attach a chart or repost it.")
+        await reset_status()
+        return
 
-            if image_analysis:
-                progress_embed.set_field_at(0, name="Status", value="✨ Finalizing technical analysis...", inline=False)
-                await status_msg.edit(embed=progress_embed)
-                await asyncio.sleep(1)
-                await status_msg.delete()
-                
-                await send_structured_analysis_embed(
-                    ctx.channel,
-                    text=image_analysis,
-                    color=0x1D82B6,
-                    title="📈 Chart Analysis",
-                    image_url=chart_url,
-                    user_mention=ctx.author.mention
-                )
-                logger.info(f"Sent image analysis to channel {ctx.channel.name}")
-                await log_interaction(
-                    user=ctx.author,
-                    channel=ctx.channel,
-                    command='analyze',
-                    user_input=user_prompt or 'No additional prompt provided',
-                    bot_response=image_analysis[:1024]
-                )
-            else:
-                error_embed = discord.Embed(
-                    title="❌ Analysis Failed",
-                    description="Sorry, I couldn't analyze the image. Please try again with a clearer chart image.",
-                    color=0xFF0000
-                )
-                error_embed.add_field(name="Suggestion", value="Make sure the image is a clear chart or technical analysis diagram.", inline=False)
-                await status_msg.edit(embed=error_embed)
-                logger.warning("Image analysis failed to return a response.")
-                
-        except Exception as e:
-            error_embed = discord.Embed(
-                title="❌ Analysis Error",
-                description="An error occurred during image analysis.",
-                color=0xFF0000
-            )
-            error_embed.add_field(name="Error", value=str(e)[:1000], inline=False)
-            await status_msg.edit(embed=error_embed)
-            logger.error(f"Error in analyze command: {e}")
-    else:
-        help_embed = discord.Embed(
-            title="🖼️ Analyze Command Help",
-            description="Upload or attach a chart/image for AI-powered technical analysis.",
-            color=0x1D82B6
-        )
-        help_embed.add_field(
-            name="Usage", 
-            value="1. Attach an image to your `!analyze` command\n2. Or use `!analyze` in a channel with recent images", 
-            inline=False
-        )
-        help_embed.add_field(
-            name="Optional Prompt", 
-            value="`!analyze Look for support and resistance levels`", 
-            inline=False
-        )
-        help_embed.set_footer(text="SecurePath Agent • Powered by GPT-5")
-        await ctx.send(embed=help_embed)
-        logger.warning("No image URL detected for analysis.")
+    # status embed
+    status = discord.Embed(
+        title="📈 Chart Analysis",
+        description=f"Prompt: {user_prompt or 'Standard technical analysis'}",
+        color=0x1D82B6
+    )
+    status.add_field(name="Status", value="Fetching image...", inline=False)
+    status_msg = await ctx.send(embed=status)
 
-    await reset_status()
-
-async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optional[discord.User] = None, 
-                             guild_id: Optional[int] = None, channel_id: Optional[int] = None) -> Optional[str]:
     try:
-        async with session.get(chart_url) as resp:
-            if resp.status != 200:
-                logger.error(f"Failed to fetch image from URL: {chart_url} with status {resp.status}")
-                return "Failed to fetch the image. Please ensure the URL is correct and accessible."
-            image_bytes = await resp.read()
+        # fetch image bytes
+        async with session.get(img_url) as resp:
+            resp.raise_for_status()
+            img_bytes = await resp.read()
+        if len(img_bytes) > MAX_IMAGE_SIZE_BYTES:
+            await ctx.send("Image too large (max 5 MB).")
+            await reset_status()
+            return
 
-        if len(image_bytes) > MAX_IMAGE_SIZE_BYTES:
-            logger.warning(f"Image size {len(image_bytes)} bytes exceeds the maximum allowed size.")
-            return "The submitted image is too large to analyze. Please provide an image smaller than 5 MB."
+        # encode to base64 data URL
+        mime = "image/png"  # could sniff from content_type
+        b64 = base64.b64encode(img_bytes).decode("ascii")
+        data_url = f"data:{mime};base64,{b64}"
 
+        # prompt
         base_prompt = (
-            "analyze this chart with technical precision. extract actionable intelligence:\n\n"
+            "analyze this chart with technical precision. extract actionable intelligence:\n"
             "**sentiment:** [bullish/bearish/neutral + confidence %]\n"
             "**key levels:** [support/resistance with exact prices]\n"
             "**pattern:** [what you see + timeframe]\n"
             "**volume:** [unusual activity + implications]\n"
             "**risk/reward:** [entry/exit/stop levels]\n"
             "**timeframe:** [best trade horizon]\n"
-            "**catalysts:** [what could move price]\n\n"
-            "no tables, no narratives, no #### formatting. bullet points only. experienced trader tone, not influencer hype. show me the charts and i'll show you the news."
+            "**catalysts:** [what could move price]\n"
+            "bullet points only. experienced trader tone."
         )
         full_prompt = f"{base_prompt} {user_prompt}" if user_prompt else base_prompt
 
-        response = await aclient.chat.completions.create(
-            model="gpt-5",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": full_prompt},
-                        {"type": "image_url", "image_url": {"url": chart_url}},
-                    ],
-                }
-            ],
-            max_completion_tokens=1000,
-        )
-        
-        analysis = response.choices[0].message.content.strip().replace("####", "###")
-        logger.debug(f"Received analysis from Vision-capable model: {analysis[:100]}...")
+        # update status
+        status.set_field_at(0, name="Status", value="Processing image with GPT-5 Vision...", inline=False)
+        await status_msg.edit(embed=status)
 
-        estimated_tokens = 1000
-        cost = (estimated_tokens / 1_000_000) * 0.60
-        
-        usage_data['openai_gpt5_vision']['requests'] += 1
-        usage_data['openai_gpt5_vision']['tokens'] += estimated_tokens
-        usage_data['openai_gpt5_vision']['cost'] += cost
-        increment_token_cost(cost)
-        
-        if user:
-            await log_usage_to_db(
-                user=user,
-                command="analyze",
-                model="gpt-5-vision",
-                input_tokens=estimated_tokens,
-                output_tokens=500,
-                cost=cost,
-                guild_id=guild_id,
-                channel_id=channel_id
+        # call gpt-5 vision
+        resp = await aclient.responses.create(
+            model="gpt-5",
+            input=[{
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": full_prompt},
+                    {"type": "input_image", "image_url": {"url": data_url, "detail": "high"}}
+                ]
+            }],
+            max_output_tokens=1000
+        )
+
+        # extract text
+        analysis = getattr(resp, "output_text", None)
+        if not analysis and hasattr(resp, "output"):
+            analysis = "".join(
+                b.text for o in resp.output for b in getattr(o, "content", [])
+                if getattr(b, "type", "") == "output_text"
             )
-        
-        logger.info(f"Estimated OpenAI GPT-5 (vision) usage: Tokens={estimated_tokens}, Cost=${cost:.6f}")
-        return analysis
+        if not analysis:
+            raise RuntimeError("Vision model returned empty output.")
+
+        # send final
+        await status_msg.delete()
+        await send_structured_analysis_embed(
+            ctx.channel,
+            text=analysis.strip(),
+            color=0x1D82B6,
+            title="📈 Chart Analysis",
+            image_url=img_url,
+            user_mention=ctx.author.mention
+        )
 
     except Exception as e:
-        logger.error(f"Error during image analysis: {str(e)}")
-        logger.error(traceback.format_exc())
-        return "An error occurred during image analysis. Please try again later."
+        await ctx.send(f"❌ Analysis failed: {e}")
+        logger.exception("Error in analyze command")
+    finally:
+        await reset_status()
 
 @bot.command(name='ask')
 async def ask(ctx: Context, *, question: Optional[str] = None) -> None:
