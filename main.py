@@ -1029,7 +1029,7 @@ async def analyze_chart_image(chart_url: str, user_prompt: str = "", user: Optio
             await log_usage_to_db(
                 user=user,
                 command="analyze",
-                model="gpt-5",
+                model="gpt-5-vision",
                 input_tokens=estimated_tokens,
                 output_tokens=500,
                 cost=cost,
