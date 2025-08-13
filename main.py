@@ -833,18 +833,21 @@ async def send_startup_notification() -> None:
     except discord.HTTPException as e:
         logger.error(f"Failed to send startup notification: {e}")
 
-@bot.command(name='analyze')
-async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
+logger = logging.getLogger("SecurePathAgent")
+
+@bot.command(name="analyze")
+async def analyze(ctx: commands.Context, *, user_prompt: str = "") -> None:
     await bot.change_presence(activity=Activity(type=ActivityType.watching, name="image analysis..."))
 
-    # locate an image
-    img_url = None
+    # locate image URL
+    img_url: Optional[str] = None
     if ctx.message.attachments:
         att = ctx.message.attachments[0]
         if att.content_type and att.content_type.startswith("image/"):
             img_url = att.url
     elif isinstance(ctx.channel, discord.DMChannel):
         await ctx.send("Please attach an image to analyze.")
+        await reset_status()
         return
     else:
         async for msg in ctx.channel.history(limit=5):
@@ -860,29 +863,16 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
         return
 
     # status embed
-    status = discord.Embed(
+    status = Embed(
         title="📈 Chart Analysis",
         description=f"Prompt: {user_prompt or 'Standard technical analysis'}",
         color=0x1D82B6
     )
     status.add_field(name="Status", value="Fetching image...", inline=False)
+    status.set_thumbnail(url=img_url)
     status_msg = await ctx.send(embed=status)
 
     try:
-        # fetch image bytes
-        async with session.get(img_url) as resp:
-            resp.raise_for_status()
-            img_bytes = await resp.read()
-        if len(img_bytes) > MAX_IMAGE_SIZE_BYTES:
-            await ctx.send("Image too large (max 5 MB).")
-            await reset_status()
-            return
-
-        # encode to base64 data URL
-        mime = "image/png"  # could sniff from content_type
-        b64 = base64.b64encode(img_bytes).decode("ascii")
-        data_url = f"data:{mime};base64,{b64}"
-
         # prompt
         base_prompt = (
             "analyze this chart with technical precision. extract actionable intelligence:\n"
@@ -901,33 +891,35 @@ async def analyze(ctx: Context, *, user_prompt: str = "") -> None:
         status.set_field_at(0, name="Status", value="Processing image with GPT-5 Vision...", inline=False)
         await status_msg.edit(embed=status)
 
-        # call gpt-5 vision
+        # call GPT-5 Vision
         resp = await aclient.responses.create(
             model="gpt-5",
             input=[{
                 "role": "user",
                 "content": [
                     {"type": "input_text", "text": full_prompt},
-                    {"type": "input_image", "image_url": data_url}
+                    {"type": "input_image", "image_url": img_url}
                 ]
             }],
             max_output_tokens=1000
         )
 
-        # extract text safely
+        logger.debug(f"Raw GPT-5 Vision response: {resp}")
+
+        # extract output safely
         analysis = getattr(resp, "output_text", None)
         if not analysis and hasattr(resp, "output"):
             parts = []
-            for o in resp.output:
-                content_list = getattr(o, "content", None) or []
-                for b in content_list:
+            for o in resp.output or []:
+                for b in getattr(o, "content", None) or []:
                     if getattr(b, "type", "") == "output_text":
-                        parts.append(b.text)
+                        parts.append(b.text or "")
             analysis = "".join(parts)
+
         if not analysis:
             raise RuntimeError("Vision model returned empty output.")
 
-        # send final
+        # send final embed
         await status_msg.delete()
         await send_structured_analysis_embed(
             ctx.channel,
