@@ -1165,8 +1165,7 @@ MESSAGES:
                     response = await aclient.chat.completions.create(
                         model='gpt-5',
                         messages=[{"role": "user", "content": prompt}],
-                        max_completion_tokens=1500,
-                        temperature=0.3
+                        max_completion_tokens=1500
                     )
                     result = response.choices[0].message.content.strip()
                     increment_api_call_counter()
@@ -1493,8 +1492,7 @@ MESSAGES:
                     response = await aclient.chat.completions.create(
                         model='gpt-5', 
                         messages=[{"role": "user", "content": prompt}], 
-                        max_completion_tokens=1500,  # Increased for better quality
-                        temperature=0.3  # Lower temperature for more focused output
+                        max_completion_tokens=2500,  # Increased for better quality
                     )
                     result = response.choices[0].message.content.strip()
                     increment_api_call_counter()
@@ -1628,8 +1626,7 @@ CHUNK SUMMARIES:
             response = await aclient.chat.completions.create(
                 model='gpt-5', 
                 messages=[{"role": "user", "content": final_prompt}], 
-                max_completion_tokens=2500,  # Increased for comprehensive output
-                temperature=0.2   # Lower for more focused synthesis
+                max_completion_tokens=5000,  # Increased for comprehensive output
             )
             final_summary = response.choices[0].message.content.strip()
             increment_api_call_counter()
