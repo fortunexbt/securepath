@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "securepath-evidence-lab"
+version = "0.2.0"
+description = "Offline-first evidence replay for citation-aware crypto research systems"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "FortuneXBT" }]
+keywords = ["evidence", "provenance", "research", "replay", "crypto"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = []
+
+[project.optional-dependencies]
+live = [
+  "aiohttp>=3.9,<4",
+  "discord.py>=2.4,<3",
+  "openai>=1.50,<3",
+]
+
+[project.scripts]
+securepath = "securepath.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/fortunexbt/securepath"
+Repository = "https://github.com/fortunexbt/securepath"
+Issues = "https://github.com/fortunexbt/securepath/issues"
+
+[tool.setuptools.packages.find]
+include = ["securepath*"]
+
+[tool.setuptools.package-data]
+"securepath.fixtures" = ["*.json"]
+
