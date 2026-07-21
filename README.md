@@ -1,171 +1,130 @@
-# SecurePath AI Discord Bot
+# SecurePath Evidence Lab
 
-SecurePath AI is a high-performance Discord bot engineered for the crypto and DeFi world. It integrates with AI models to deliver real-time insights, advanced chart analysis, and blockchain intelligence, all within Discord. Designed to scale, SecurePath AI leverages efficient caching, dynamic logging, and API handling to ensure it provides top-tier information with minimal delays.
+[![Evidence proof](https://github.com/fortunexbt/securepath/actions/workflows/test.yml/badge.svg)](https://github.com/fortunexbt/securepath/actions/workflows/test.yml)
+[![Python 3.11–3.13](https://img.shields.io/badge/Python-3.11%E2%80%933.13-3776AB.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-4C7A6B.svg)](LICENSE)
 
-## Key Features
+SecurePath is an offline-first reference implementation for research systems that need to show **what evidence accompanied an answer, what did not, and whether the resulting packet changed**. The default demo is deterministic, dependency-free, and makes no network request.
 
-- **Expert Crypto Insights**: Responds to user queries with advanced DeFi and blockchain information.
-- **Image and Chart Analysis**: Processes charts through the Vision API and provides quant-level technical analysis.
-- **Contextual Conversation Flow**: Maintains awareness across user interactions, making conversations coherent and dynamic.
-- **Rich Logging with `rich`**: Provides highly detailed, colorful logs to make debugging and monitoring seamless.
-- **API Rate Management**: Ensures graceful API handling with rate limiting, retry mechanisms, and automatic error recovery.
+This revival keeps the useful heart of the original Discord research bot—provider queries, citations, policy controls, and presentation—while replacing a 2,088-line runtime with small, testable modules. It is a lab and portfolio proof, not a claim that model output is true.
 
----
+## What is real today
 
-## Installation Guide
+| Path | Network / secrets | Evidence semantics | Status |
+| --- | --- | --- | --- |
+| Packaged replay | None | Synthetic fixture, stable hash | Verified offline proof |
+| Perplexity query | API key + network | Provider-supplied citations retained; not independently verified | Optional live adapter |
+| OpenAI query | API key + network | Explicitly marked unsourced | Optional live adapter |
+| Discord `!ask` | Provider key + bot token + network | Same packet policy, mention suppression, per-user rate limit | Optional live bridge |
 
-### Prerequisites
+Chart-image analysis, conversation memory, scheduled news summaries, PostgreSQL telemetry, owner commands, and performance claims from the legacy bot were intentionally not carried forward. They obscured the evidence boundary and had no maintained offline proof.
 
-- **Python 3.9+**
-- **`pip`** (Python package manager)
-- **Git**
-- **Discord Bot Token**: Setup required in the [Discord Developer Portal](https://discord.com/developers/applications).
-- **API Key**: Required for using OpenAI or Perplexity.
+## Run the proof
 
-### Step 1: Clone the Repository
-
-```bash
-git clone https://github.com/fortunexbt/securepath.git
-cd securepath
-```
-
-### Step 2: Set Up a Virtual Environment
+Python 3.11 or newer is enough:
 
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python -m securepath replay --verify
 ```
 
-### Step 3: Install Dependencies
+Or emit machine-readable output:
 
 ```bash
-pip install -r requirements.txt
+python -m securepath replay --format json --verify
 ```
 
-### Step 4: Configure Environment Variables
+No `.env`, Discord token, API key, third-party package, or internet access is required. `python main.py` remains as a compatibility entry point and also runs the replay.
 
-Create a `.env` file in the root directory with your configuration:
+The replay loads a clearly labeled synthetic validator-operations case, enforces the evidence policy, canonicalizes and deduplicates sources, maps claims to stable source IDs, and computes a SHA-256 integrity identity over the complete evidence payload. Repeating it produces the same packet ID.
 
-#### **Essential Configuration:**
+## Architecture
 
-```
-DISCORD_TOKEN=your_discord_bot_token
-OWNER_ID=your_discord_user_id
-
-# If using OpenAI
-OPENAI_API_KEY=your_openai_api_key
-
-# If using Perplexity
-PERPLEXITY_API_KEY=your_perplexity_api_key
-PERPLEXITY_API_URL=https://api.perplexity.ai/chat/completions
-PERPLEXITY_TIMEOUT=60
-
-# Set to True if using Perplexity, otherwise it will default to OpenAI.
-USE_PERPLEXITY_API=True
+```text
+connector -> normalized result -> evidence policy -> provenance hash -> JSON / Markdown
+    |                                  |
+    + fixture (offline)                + URI, size, reference, timestamp checks
+    + Perplexity (optional live)
+    + OpenAI (optional live)
 ```
 
-- **`DISCORD_TOKEN`**: (Required) Your bot's authentication token from Discord.
-- **`OWNER_ID`**: (Required) Your Discord User ID, allowing you to manage privileged commands.
-- **`OPENAI_API_KEY`**: (Required if not using Perplexity) API key to use OpenAI's GPT models.
-- **`PERPLEXITY_API_KEY`**: (Required if using Perplexity) API key for Perplexity.
-- **`USE_PERPLEXITY_API`**: (Optional) Whether to use Perplexity or OpenAI APIs.
+- `securepath/connectors/` isolates fixture and provider I/O.
+- `securepath/policy.py` rejects broken references, unsafe citation schemes, credential-bearing URLs, oversized content, and ambiguous timestamps.
+- `securepath/provenance.py` canonicalizes sources and binds accepted packets to a stable SHA-256 digest.
+- `securepath/presentation.py` renders deterministic JSON or readable Markdown and suppresses Discord mentions.
+- `securepath/integrations/` contains delivery code that is never imported by the offline path.
 
-#### **Optional Configuration:**
+The hash proves that a packet has not changed since construction. It does **not** prove that a cited page is correct, that a provider interpreted it faithfully, or that content at a URL has remained unchanged.
 
-```
-LOG_CHANNEL_ID=your_discord_log_channel_id
-SUMMARY_CHANNEL_ID=your_discord_summary_channel_id
-NEWS_CHANNEL_ID=your_discord_news_channel_id
-CHARTIST_CHANNEL_ID=your_discord_chartist_channel_id
-NEWS_BOT_USER_ID=your_news_bot_user_id
+## Optional live modes
 
-API_RATE_LIMIT_MAX=100
-API_RATE_LIMIT_INTERVAL=60
-DAILY_API_CALL_LIMIT=1000
-
-MAX_CONTEXT_MESSAGES=50
-MAX_CONTEXT_AGE=3600
-LOG_LEVEL=INFO
-LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
-```
-
-- **`LOG_CHANNEL_ID`**: (Optional) Discord channel ID for logging bot activity. Defaults to no logging if not provided.
-- **`SUMMARY_CHANNEL_ID`**: (Optional) Used if generating summaries in specific channels.
-- **`NEWS_CHANNEL_ID`**: (Optional) ID of the news feed channel the bot can post summaries to.
-- **`CHARTIST_CHANNEL_ID`**: (Optional) Channel ID to track market charts and trends.
-- **`NEWS_BOT_USER_ID`**: (Optional) Used if monitoring or interacting with a bot that posts news updates.
-
----
-
-### Step 5: Bot Configuration in Discord Developer Portal
-
-1. Go to the [Discord Developer Portal](https://discord.com/developers/applications).
-2. Select your bot application, navigate to **Bot**, and enable the following:
-   - **Message Content Intent**
-3. Save and generate the OAuth2 URL to invite your bot to your server.
-
-### Step 6: Running the Bot
-
-Once your `.env` is set up, run the bot:
+Install live-only dependencies:
 
 ```bash
-python main.py
+python -m pip install -e '.[live]'
 ```
 
-You should see real-time logs displayed in your terminal confirming the bot is running.
+Set values in your shell or secret manager; `.env.example` documents every supported name. SecurePath does not auto-load `.env` files and never needs both provider keys.
 
----
-
-## Advanced Features
-
-### Caching and Rate Limiting
-
-SecurePath AI uses advanced caching to avoid redundant API calls and enforces rate limits to prevent overuse. You can configure API call limits and intervals in the `.env`:
-
-```env
-API_RATE_LIMIT_MAX=100
-API_RATE_LIMIT_INTERVAL=60
-DAILY_API_CALL_LIMIT=1000
+```bash
+export SECUREPATH_PROVIDER=perplexity
+export PERPLEXITY_API_KEY='...'
+python -m securepath validate-live --provider perplexity
+python -m securepath live-query --provider perplexity \
+  'What operational risks should a validator team investigate?'
 ```
 
-### Custom Context and Message Limits
+For OpenAI, set `OPENAI_API_KEY` and select `--provider openai`. That adapter is deliberately labeled `unsourced`: a normal chat completion does not provide a citation chain this lab can preserve.
 
-Fine-tune how much historical context the bot retains by adjusting these optional environment variables:
+The validation command prints only a redacted configuration summary. Provider keys are validated only for the provider selected at the live boundary. The Perplexity endpoint must be absolute HTTPS and cannot contain embedded credentials.
 
-```env
-MAX_CONTEXT_MESSAGES=50  # Number of messages stored in conversation history
-MAX_CONTEXT_AGE=3600     # Maximum age of messages in seconds
+### Discord bridge
+
+Set `DISCORD_TOKEN` plus the selected provider key, enable Message Content Intent for the bot, then run:
+
+```bash
+python -m securepath live-discord --provider perplexity
 ```
 
-### Logging and Debugging
+The bridge exposes one command, `!ask <question>`. It disables generated mentions, bounds messages, applies an in-memory per-user sliding-window limit, and returns the same conspicuously labeled evidence packet as the CLI. The rate limit is process-local, so a multi-instance deployment needs a shared limiter before it should be considered abuse-resistant.
 
-Use the `LOG_CHANNEL_ID` and `LOG_LEVEL` to control logging. Logs will be sent to your specified Discord channel or can be viewed directly in the console. For example:
+## Configuration
 
-```env
-LOG_CHANNEL_ID=1234567890
-LOG_LEVEL=DEBUG  # Can be INFO, DEBUG, WARNING, ERROR
+| Variable | Used when | Default |
+| --- | --- | --- |
+| `SECUREPATH_PROVIDER` | Live mode without `--provider` | `perplexity` |
+| `PERPLEXITY_API_KEY` | Perplexity only | Required |
+| `PERPLEXITY_MODEL` | Perplexity only | `sonar-pro` |
+| `PERPLEXITY_API_URL` | Perplexity only | Official HTTPS completions endpoint |
+| `OPENAI_API_KEY` | OpenAI only | Required |
+| `OPENAI_MODEL` | OpenAI only | `gpt-5` |
+| `DISCORD_TOKEN` | Discord only | Required |
+| `SECUREPATH_TIMEOUT_SECONDS` | Live providers | `45` |
+| `SECUREPATH_COMMAND_PREFIX` | Discord | `!` |
+| `SECUREPATH_RATE_LIMIT_COUNT` | Discord | `5` |
+| `SECUREPATH_RATE_LIMIT_SECONDS` | Discord | `60` |
+
+## Development
+
+The full core test suite uses the standard library:
+
+```bash
+python -m compileall -q securepath tests main.py
+python -m unittest discover -s tests -v
+python -m securepath replay --format json --verify
 ```
 
-### Dynamic Status and Presence
+CI runs those checks across supported Python versions and builds a wheel without pulling live dependencies.
 
-The bot periodically updates its Discord presence, indicating its current task (e.g., analyzing charts or fetching market insights). The statuses rotate automatically during operation.
+## Security and scope
 
----
+- Never commit live keys; `.env` is ignored and `.env.example` contains blanks only.
+- Offline imports and replay do not read configuration or initialize a network client.
+- Live errors report status or exception type, not provider response bodies or credentials.
+- Citations are data supplied by a provider, not independent verification.
+- The synthetic fixture is a software demonstration, not current staking guidance.
 
-## Troubleshooting
-
-- **Module Not Found**: Ensure the virtual environment is activated and dependencies installed via `pip install -r requirements.txt`.
-- **Bot Not Responding**: Check if the bot token and API key(s) are correctly set in your `.env`. Verify bot permissions on Discord.
-- **Rate Limiting**: If you hit the API limit, adjust the `API_RATE_LIMIT_MAX` and `DAILY_API_CALL_LIMIT` as needed.
-
----
+SecurePath provides educational research infrastructure, not financial, legal, security, or investment advice. Validate live claims against primary sources before acting.
 
 ## License
 
-This project is licensed under the MIT License.
-
----
-
-## Disclaimer
-
-SecurePath AI provides information for educational purposes only and should not be considered financial advice. Always conduct your own research before making investment decisions.
+MIT — see [LICENSE](LICENSE).

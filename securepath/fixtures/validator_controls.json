@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "case_id": "validator-controls-v1",
+  "question": "What evidence should an operator demand before treating a staking service as production-ready?",
+  "result": {
+    "answer": "Treat production readiness as an evidence threshold, not a launch label. Require a documented key-custody boundary, a rehearsed incident path, and monitoring that proves missed duties are detected and owned. Then replay failures in a staging environment and retain the resulting artifacts for review. This fixture demonstrates those controls without making claims about a live network, provider, or expected return.",
+    "claims": [
+      {
+        "text": "Production approval should require an explicit key-custody boundary and recovery procedure.",
+        "source_ids": ["custody-note"]
+      },
+      {
+        "text": "Alert ownership and an incident rehearsal should be demonstrated before launch.",
+        "source_ids": ["operations-note"]
+      },
+      {
+        "text": "Failure replay artifacts provide a reviewable basis for a readiness decision.",
+        "source_ids": ["replay-note"]
+      }
+    ],
+    "sources": [
+      {
+        "id": "operations-note",
+        "title": "Fixture note: operational ownership",
+        "uri": "fixture://validator-controls/operations",
+        "excerpt": "Synthetic control: every alert has a named owner, escalation path, and rehearsed response."
+      },
+      {
+        "id": "custody-note",
+        "title": "Fixture note: key custody",
+        "uri": "fixture://validator-controls/custody",
+        "excerpt": "Synthetic control: signing authority, backup handling, and recovery approval are documented and separated."
+      },
+      {
+        "id": "replay-note",
+        "title": "Fixture note: failure replay",
+        "uri": "fixture://validator-controls/replay",
+        "excerpt": "Synthetic control: missed duties and degraded dependencies are replayed, with timestamps and outcomes retained."
+      }
+    ],
+    "provider": "securepath-fixture",
+    "model": "evidence-replay-v1",
+    "evidence_state": "fixture",
+    "captured_at": "2026-07-21T12:00:00Z",
+    "metadata": {
+      "scenario": "validator production-readiness review",
+      "synthetic": true
+    }
+  }
+}
